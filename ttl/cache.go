@@ -8,13 +8,14 @@ import (
 
 // Cache is a synchronised map of items that auto-expire once stale
 type Cache struct {
-	mutex    sync.RWMutex
-	capacity int
+	sync.RWMutex
+	cap      int
 	ttl      time.Duration
 	items    map[interface{}]Item
 	lruList  *list.List // realize LikedHashMap with items
 	ttlList  *list.List // realize LikedHashMap with items
 	timer    *time.Timer
+	cleaning bool
 	shutdown chan struct{}
 }
 
@@ -29,41 +30,43 @@ type entry struct {
 	key interface{} // 如果key比较大，会造成内存占用高
 }
 
-// NewCache create a cache which maintains permanence k-v
-func NewCache() *Cache {
+type CacheOption func(*Cache)
+
+func CacheWithLRU(cap int) CacheOption {
+	return func(c *Cache) {
+		if cap > 0 {
+			c.cap = cap
+			c.lruList = list.New()
+		}
+	}
+}
+
+func CacheWithTTL(d time.Duration) CacheOption {
+	return func(c *Cache) {
+		if d < time.Second {
+			d = time.Second
+		}
+		c.ttl = d
+		c.ttlList = list.New()
+	}
+}
+
+// NewCache create a K-V cache
+func NewCache(opts ...CacheOption) *Cache {
 	c := &Cache{
 		items:    make(map[interface{}]Item),
 		shutdown: make(chan struct{}),
 	}
-	return c
-}
-
-func NewCacheWithLRU(cap int) *Cache {
-	c := &Cache{
-		items:    make(map[interface{}]Item),
-		shutdown: make(chan struct{}),
-	}
-	if cap > 0 {
-		c.capacity = cap
-		c.lruList = list.New()
+	for _, opt := range opts {
+		opt(c)
 	}
 	return c
 }
 
-func NewCacheWithTTL(d time.Duration) *Cache {
-	c := &Cache{
-		items:    make(map[interface{}]Item),
-		shutdown: make(chan struct{}),
-	}
-	c.ttl = d
-	c.ttlList = list.New()
-	return c
-}
-
-// Set is a thread-safe way to add new items to the map
+// Set is a thread-safe way to set item to the map
 func (c *Cache) Set(key, value interface{}) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.Lock()
+	defer c.Unlock()
 	// already exist
 	if item, ok := c.items[key]; ok {
 		if c.lruList != nil {
@@ -82,19 +85,25 @@ func (c *Cache) Set(key, value interface{}) {
 	if c.ttlList != nil {
 		item.expireAt = time.Now().Add(c.ttl)
 		item.ttl = c.ttlList.PushFront(&ent)
+		if !c.cleaning {
+			if c.timer == nil {
+				c.timer = time.NewTimer(c.ttl)
+			} else {
+				// reset timer
+				c.timer.Reset(c.ttl)
+			}
+			c.cleaning = true
+			go c.startCleanup()
+		}
 	}
 	if c.lruList != nil {
 		item.lru = c.lruList.PushFront(&ent)
 	}
 	// add new
 	c.items[key] = item
-	// timer
-	if c.timer == nil {
-		go c.startCleanupTimer()
-	}
 
 	// remove least used if over maximum capacity
-	if c.capacity > 0 && len(c.items) > c.capacity {
+	if c.cap > 0 && len(c.items) > c.cap {
 		if e := c.lruList.Back(); e != nil {
 			c.remove(e.Value.(*entry).key)
 		}
@@ -104,16 +113,16 @@ func (c *Cache) Set(key, value interface{}) {
 // Get is a thread-safe way to lookup items.
 // Every lookup, also hence extending it's life if ttl is enabled
 func (c *Cache) Get(key interface{}) (interface{}, bool) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.Lock()
+	defer c.Unlock()
 
 	item, ok := c.items[key]
 	if !ok {
 		return nil, false
 	}
 
-	if item.expireAt.After(time.Now()) {
-		if c.capacity > 0 {
+	if item.expireAt.IsZero() || item.expireAt.After(time.Now()) {
+		if c.cap > 0 {
 			c.lruList.MoveToFront(item.lru)
 		}
 		return item.value, true
@@ -123,10 +132,11 @@ func (c *Cache) Get(key interface{}) (interface{}, bool) {
 	return nil, false
 }
 
+// Remove removes item from Cache
 func (c *Cache) Remove(key interface{}) {
-	c.mutex.Lock()
+	c.Lock()
 	c.remove(key)
-	c.mutex.Unlock()
+	c.Unlock()
 }
 
 func (c *Cache) remove(key interface{}) {
@@ -141,23 +151,46 @@ func (c *Cache) remove(key interface{}) {
 
 // Len returns the number of items in the cache
 func (c *Cache) Len() int {
-	c.mutex.RLock()
+	c.RLock()
 	lens := len(c.items)
-	c.mutex.RUnlock()
+	c.RUnlock()
 	return lens
 }
 
+// Reset remove all data from Cache so it can use again
+func (c *Cache) Reset() {
+	if !c.timer.Stop() {
+		select {
+		case <-c.timer.C: // try to drain from the channel
+		default:
+		}
+	}
+	c.Lock()
+	c.items = make(map[interface{}]Item)
+	if c.lruList != nil {
+		c.lruList.Init()
+	}
+	if c.ttlList != nil {
+		c.ttlList.Init()
+	}
+	c.Unlock()
+}
+
+// Close remove all data from Cache and exit cleanup.
+// Cache cannot use any more after close
 func (c *Cache) Close() {
-	c.mutex.Lock()
+	c.Lock()
 	close(c.shutdown)
 	c.items = nil
 	c.lruList = nil
 	c.ttlList = nil
-	c.mutex.Unlock()
+	c.cleaning = false
+	c.Unlock()
 }
 
 // cleanup cleanup expired items and reset timer for next cleanup
-func (c *Cache) cleanup() {
+// if there's no more data in ttlList, exit
+func (c *Cache) cleanup() bool {
 	for {
 		if e := c.ttlList.Back(); e != nil {
 			key := e.Value.(*entry).key
@@ -176,23 +209,28 @@ func (c *Cache) cleanup() {
 			// 	}
 			// }
 			c.timer.Reset(d)
+			return false
 		}
-		return
+		return true
 	}
 }
 
 // TODO: timewheel
 // https://github.com/rfyiamcool/golib/blob/29fd190076471bbc97809eba72c25cacd51dccf5/timewheel/tw.go
-func (c *Cache) startCleanupTimer() {
-	c.timer = time.NewTimer(c.ttl)
+func (c *Cache) startCleanup() {
 	for {
 		select {
 		case <-c.shutdown:
+			c.timer.Stop()
 			return
 		case <-c.timer.C:
-			c.mutex.Lock()
-			c.cleanup()
-			c.mutex.Unlock()
+			c.Lock()
+			if c.cleanup() {
+				c.Unlock()
+				c.cleaning = false
+				return
+			}
+			c.Unlock()
 		}
 	}
 }

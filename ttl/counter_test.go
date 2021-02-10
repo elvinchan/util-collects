@@ -4,19 +4,20 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/elvinchan/util-collects/testkit"
 )
 
 func TestCounter(t *testing.T) {
-	ttl := NewCounter(time.Second * 5)
-	ttl.Incr()
+	c := NewCounter(time.Second * 5)
+	c.Incr()
 	time.Sleep(time.Second * 2)
-	ttl.Incr()
+	c.Incr()
 	ticker := time.NewTicker(time.Second * 1)
-	for {
+	results := []int{2, 2, 2, 1, 0}
+	for i := 0; i < len(results); i++ {
 		<-ticker.C
-		fmt.Println("current len:", ttl.Len())
-		if ttl.Len() == 0 {
-			break
-		}
+		fmt.Println("-----", c.Len())
+		testkit.Assert(t, c.Len() == results[i])
 	}
 }

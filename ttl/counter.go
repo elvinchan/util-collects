@@ -6,27 +6,33 @@ import (
 )
 
 type Counter struct {
-	duration time.Duration
-	records  []time.Time
 	sync.RWMutex
+	ttl      time.Duration
+	records  []time.Time
+	timer    *time.Timer
+	cleaning bool
+	shutdown chan struct{}
 }
 
-func NewCounter(duration time.Duration) *Counter {
+// NewCounter create a counter with TTL records
+func NewCounter(d time.Duration) *Counter {
 	return &Counter{
-		duration: duration,
+		ttl: d,
 	}
 }
 
-func (t *Counter) Incr() {
-	t.Lock()
-	var start bool
-	if t.Len() == 0 {
-		start = true
-	}
-	t.records = append(t.records, time.Now())
-	t.Unlock()
-	if start {
-		go t.cleanup()
+func (c *Counter) Incr() {
+	c.Lock()
+	defer c.Unlock()
+	c.records = append(c.records, time.Now())
+	if !c.cleaning {
+		if c.timer == nil {
+			c.timer = time.NewTimer(c.ttl)
+		} else {
+			c.timer.Reset(c.ttl)
+		}
+		c.cleaning = true
+		go c.startCleanup()
 	}
 }
 
@@ -35,33 +41,49 @@ func (t *Counter) Len() int {
 }
 
 func (t *Counter) pop() {
-	t.Lock()
 	if t.Len() > 0 {
 		t.records = t.records[1:]
 	}
-	t.Unlock()
 }
 
 func (t *Counter) get() time.Time {
 	var result time.Time
-	t.RLock()
 	if t.Len() > 0 {
 		result = t.records[0]
 	}
-	t.RUnlock()
 	return result
 }
 
-func (t *Counter) cleanup() {
-	earlyest := t.get()
-	if earlyest.IsZero() {
-		return
+func (c *Counter) cleanup() bool {
+	for {
+		earlyest := c.get()
+		if earlyest.IsZero() {
+			return true
+		}
+		d := time.Until(earlyest.Add(c.ttl))
+		if d <= 0 {
+			c.pop()
+			continue
+		}
+		c.timer.Reset(d)
+		return false
 	}
-	duration := time.Until(earlyest.Add(t.duration))
-	if duration > 0 {
-		timer := time.NewTimer(duration)
-		<-timer.C
+}
+
+func (c *Counter) startCleanup() {
+	for {
+		select {
+		case <-c.shutdown:
+			c.timer.Stop()
+			return
+		case <-c.timer.C:
+			c.Lock()
+			if c.cleanup() {
+				c.Unlock()
+				c.cleaning = false
+				return
+			}
+			c.Unlock()
+		}
 	}
-	t.pop()
-	go t.cleanup()
 }
