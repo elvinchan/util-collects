@@ -23,7 +23,7 @@ func TestSetGet(t *testing.T) {
 
 	t.Run("TTL", func(t *testing.T) {
 		c := NewCache(CacheWithTTL(time.Millisecond))
-		testkit.Assert(t, c.ttl == time.Second)
+		testkit.Assert(t, c.ttl == time.Millisecond*10)
 		testkit.Assert(t, c.ttlList != nil)
 
 		initNum := runtime.NumGoroutine()
@@ -34,7 +34,7 @@ func TestSetGet(t *testing.T) {
 		testkit.Assert(t, v.(string) == "hello")
 		testkit.Assert(t, runtime.NumGoroutine() == initNum+1)
 
-		time.Sleep(time.Millisecond * 1100)
+		time.Sleep(time.Millisecond * 20)
 		testkit.Assert(t, c.Len() == 0)
 		_, ok = c.Get(1)
 		testkit.Assert(t, !ok)
@@ -68,7 +68,7 @@ func TestSetGet(t *testing.T) {
 
 	t.Run("TTL+LRU", func(t *testing.T) {
 		c := NewCache(CacheWithTTL(time.Millisecond), CacheWithLRU(2))
-		testkit.Assert(t, c.ttl == time.Second)
+		testkit.Assert(t, c.ttl == time.Millisecond*10)
 		testkit.Assert(t, c.ttlList != nil)
 		testkit.Assert(t, c.cap == 2)
 		testkit.Assert(t, c.lruList != nil)
@@ -94,7 +94,7 @@ func TestSetGet(t *testing.T) {
 		testkit.Assert(t, !ok)
 		testkit.Assert(t, runtime.NumGoroutine() == initNum+1)
 
-		time.Sleep(time.Millisecond * 1100)
+		time.Sleep(time.Millisecond * 20)
 		testkit.Assert(t, c.Len() == 0)
 		_, ok = c.Get(1)
 		testkit.Assert(t, !ok)

@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+var defaultMinGap = time.Second
+
 // Cache is a synchronised map of items that auto-expire once stale
 type Cache struct {
 	sync.RWMutex
@@ -43,8 +45,8 @@ func CacheWithLRU(cap int) CacheOption {
 
 func CacheWithTTL(d time.Duration) CacheOption {
 	return func(c *Cache) {
-		if d < time.Second {
-			d = time.Second
+		if d < defaultMinGap {
+			d = defaultMinGap
 		}
 		c.ttl = d
 		c.ttlList = list.New()
@@ -198,8 +200,8 @@ func (c *Cache) cleanup() bool {
 			if d <= 0 {
 				c.remove(key)
 				continue
-			} else if d < time.Second {
-				d = time.Second
+			} else if d < defaultMinGap {
+				d = defaultMinGap
 			}
 			// seems not necessary to stop
 			// if !c.timer.Stop() {

@@ -21,7 +21,7 @@ func TestStart(t *testing.T) {
 		ppgid, err := syscall.Getpgid(syscall.Getpid())
 		testkit.Assert(t, err == nil)
 		testkit.Assert(t, pgid == ppgid)
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 500)
 		testkit.Assert(t, buf.String() == "hello\n")
 	})
 
@@ -34,7 +34,7 @@ func TestStart(t *testing.T) {
 		ppgid, err := syscall.Getpgid(syscall.Getpid())
 		testkit.Assert(t, err == nil)
 		testkit.Assert(t, pgid != ppgid)
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 500)
 		testkit.Assert(t, buf.String() == "hello\n")
 	})
 }

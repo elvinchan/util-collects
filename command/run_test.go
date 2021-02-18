@@ -12,20 +12,20 @@ import (
 
 func TestRunBytes(t *testing.T) {
 	t.Run("Normal", func(t *testing.T) {
-		b, err := RunBytes("echo", RunWithArgs("hello"), RunWithTimeout(time.Second*2))
+		b, err := RunBytes("echo", RunWithArgs("hello"), RunWithTimeout(time.Millisecond*800))
 		testkit.Assert(t, err == nil)
 		testkit.Assert(t, string(b) == "hello\n")
 	})
 
 	t.Run("Timeout", func(t *testing.T) {
-		b, err := RunBytes("sleep", RunWithArgs("10"), RunWithTimeout(time.Second*2))
+		b, err := RunBytes("sleep", RunWithArgs("2"), RunWithTimeout(time.Millisecond*800))
 		testkit.Assert(t, err.Error() == context.DeadlineExceeded.Error())
 		testkit.Assert(t, string(b) == "")
 	})
 
 	t.Run("BeyondLimit", func(t *testing.T) {
 		longTxt := "abcdefghijklmnopqrstuvwxyz"
-		b, err := RunBytes("echo", RunWithArgs(longTxt), RunWithTimeout(time.Second*2), RunWithSize(16))
+		b, err := RunBytes("echo", RunWithArgs(longTxt), RunWithTimeout(time.Millisecond*800), RunWithSize(16))
 		testkit.Assert(t, err.Error() == fmt.Sprintf("data beyond limit: %v", human.IBytes(16)))
 		testkit.Assert(t, string(b) == longTxt[:16])
 	})

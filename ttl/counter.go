@@ -65,7 +65,7 @@ func (c *Counter) cleanup() bool {
 			c.pop()
 			continue
 		}
-		c.timer.Reset(d)
+		c.timer.Reset(c.ttl)
 		return false
 	}
 }
