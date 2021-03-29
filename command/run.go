@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os/exec"
+	"sync/atomic"
 	"time"
 
 	"github.com/elvinchan/util-collects/human"
@@ -93,6 +94,20 @@ func RunBytes(name string, opts ...RunOption) ([]byte, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+
+	var hadWait uint32
+	defer func() {
+		// prevent two approach:
+		// panic when reading from pipe
+		// read from pipe with error
+		if atomic.CompareAndSwapUint32(&hadWait, 0, 1) {
+			_ = cmd.Wait()
+		}
+	}()
+
+	// Not waiting for context done in parallel because we need this approach:
+	// context done -> process been killed -> read all from pipe
+	// -> return both the data has been read and ctx.Err()
 	data, err := readLimit(stdout, r.size)
 	if err != nil {
 		return data, err
@@ -100,7 +115,9 @@ func RunBytes(name string, opts ...RunOption) ([]byte, error) {
 
 	errc := make(chan error, 1)
 	go func() {
-		errc <- cmd.Wait()
+		if atomic.CompareAndSwapUint32(&hadWait, 0, 1) {
+			errc <- cmd.Wait()
+		}
 	}()
 
 	select {
