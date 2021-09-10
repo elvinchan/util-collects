@@ -59,18 +59,46 @@ func Wait(durations ...time.Duration) Strategy {
 // Backoff creates a Strategy that waits before each attempt, with a duration as
 // defined by the given Algorithm.
 func Backoff(algorithm Algorithm) Strategy {
-	return BackoffWithJitter(algorithm, func(duration time.Duration) time.Duration {
+	return BackoffJitter(algorithm, func(duration time.Duration) time.Duration {
 		return duration
 	})
 }
 
 // BackoffWithJitter creates a Strategy that waits before each attempt, with a
 // duration as defined by the given Algorithm and Transformation.
-func BackoffWithJitter(algorithm Algorithm, transformation Transformation) Strategy {
+func BackoffJitter(algorithm Algorithm, transformation Transformation) Strategy {
 	return func(ctx context.Context, attempt uint) bool {
 		keep := true
 		if attempt > 0 {
 			timer := time.NewTimer(transformation(algorithm(attempt)))
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				keep = false
+			}
+		}
+		return keep
+	}
+}
+
+func BackoffLimit(algorithm Algorithm, limit time.Duration) Strategy {
+	return BackoffLimitJitter(algorithm, limit,
+		func(duration time.Duration) time.Duration {
+			return duration
+		},
+	)
+}
+
+func BackoffLimitJitter(algorithm Algorithm, limit time.Duration,
+	transformation Transformation) Strategy {
+	return func(ctx context.Context, attempt uint) bool {
+		keep := true
+		if attempt > 0 {
+			t := algorithm(attempt)
+			if t > limit {
+				t = limit
+			}
+			timer := time.NewTimer(transformation(t))
 			select {
 			case <-timer.C:
 			case <-ctx.Done():

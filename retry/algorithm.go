@@ -5,16 +5,6 @@ import (
 	"time"
 )
 
-func LimitAlgorithm(algorithm Algorithm, limit time.Duration) Algorithm {
-	return func(attempt uint) time.Duration {
-		t := algorithm(attempt)
-		if t > limit {
-			return limit
-		}
-		return t
-	}
-}
-
 type Algorithm func(attempt uint) time.Duration
 
 // Incremental creates a Algorithm that increments the initial duration
