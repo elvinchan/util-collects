@@ -11,7 +11,7 @@ type Strategy func(ctx context.Context, attempt uint) bool
 // make.
 func Limit(attemptLimit uint) Strategy {
 	return func(ctx context.Context, attempt uint) bool {
-		return (attempt <= attemptLimit)
+		return (attempt < attemptLimit)
 	}
 }
 

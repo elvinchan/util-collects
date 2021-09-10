@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+func LimitAlgorithm(algorithm Algorithm, limit time.Duration) Algorithm {
+	return func(attempt uint) time.Duration {
+		t := algorithm(attempt)
+		if t > limit {
+			return limit
+		}
+		return t
+	}
+}
+
 type Algorithm func(attempt uint) time.Duration
 
 // Incremental creates a Algorithm that increments the initial duration
@@ -49,10 +59,8 @@ func Fibonacci(factor time.Duration) Algorithm {
 }
 
 func fibonacciNumber(n uint) uint {
-	if 0 == n {
-		return 0
-	} else if 1 == n {
-		return 1
+	if n == 0 || n == 1 {
+		return n
 	} else {
 		return fibonacciNumber(n-1) + fibonacciNumber(n-2)
 	}

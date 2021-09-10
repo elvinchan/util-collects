@@ -20,7 +20,7 @@ func Do(ctx context.Context, action Action, strategies ...Strategy) error {
 			return ctx.Err()
 		default:
 		}
-		err = action(ctx, attempt)
+		err = action(ctx, attempt+1)
 	}
 	return err
 }
