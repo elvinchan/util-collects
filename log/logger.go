@@ -84,7 +84,11 @@ func NewDefaultLogger(prefix string) *logger {
 	return NewLogger(prefix, Output(func(i GetInfo, level Level,
 		fields map[string]interface{}, msg string) {
 		fs, _ := json.Marshal(fields)
-		ol.Printf("%s %s | %s | %s\n", level, i.Prefix(), fs, msg)
+		if i.Prefix() == "" {
+			ol.Printf("%s %s | %s\n", level, fs, msg)
+		} else {
+			ol.Printf("%s %s | %s | %s\n", level, i.Prefix(), fs, msg)
+		}
 	}))
 }
 
