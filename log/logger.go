@@ -128,7 +128,7 @@ func (l *logger) WithError(err error) Entry {
 	return &entry{
 		logger: l,
 		fields: map[string]interface{}{
-			ErrorKey: err,
+			ErrorKey: err.Error(),
 		},
 	}
 }

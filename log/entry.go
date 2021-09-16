@@ -28,7 +28,7 @@ func (e *entry) WithField(key string, value interface{}) Entry {
 }
 
 func (e *entry) WithError(err error) Entry {
-	e.fields[ErrorKey] = err
+	e.fields[ErrorKey] = err.Error()
 	return e
 }
 
