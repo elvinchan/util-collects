@@ -10,10 +10,12 @@ type (
 		WithField(key string, value interface{}) Entry
 		WithError(err error) Entry
 
-		Debug(format string, v ...interface{})
-		Info(format string, v ...interface{})
-		Warn(format string, v ...interface{})
+		Fatal(format string, v ...interface{})
+		Panic(format string, v ...interface{})
 		Error(format string, v ...interface{})
+		Warn(format string, v ...interface{})
+		Info(format string, v ...interface{})
+		Debug(format string, v ...interface{})
 	}
 
 	entry struct {
