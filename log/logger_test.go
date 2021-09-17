@@ -5,7 +5,17 @@ import (
 	"testing"
 )
 
-func TestCustomerLogger(t *testing.T) {
+type testReceiver struct {
+	outputer func(i GetInfo, level Level, fields map[string]interface{},
+		msg string)
+}
+
+func (r *testReceiver) Output(i GetInfo, level Level,
+	fields map[string]interface{}, msg string) {
+	r.outputer(i, level, fields, msg)
+}
+
+func TestCustomizedReceiver(t *testing.T) {
 	cases := []struct {
 		Prefix string
 		Level  Level
@@ -33,10 +43,11 @@ func TestCustomerLogger(t *testing.T) {
 		t.Run(fmt.Sprintf("Case-%d", i), func(t *testing.T) {
 			resultCh := make(chan string, 1)
 			fieldsCh := make(chan map[string]interface{}, 1)
-			l := NewLogger("test", func(i GetInfo, level Level,
-				fields map[string]interface{}, msg string) {
-				resultCh <- fmt.Sprintf("%s %s - %s", level, i.Prefix(), msg)
-				fieldsCh <- fields
+			l := NewLogger("test", &testReceiver{
+				outputer: func(i GetInfo, level Level, fields map[string]interface{}, msg string) {
+					resultCh <- fmt.Sprintf("%s %s - %s", level, i.Prefix(), msg)
+					fieldsCh <- fields
+				},
 			})
 			l.SetLevel(DebugLevel)
 			l.SetPrefix(c.Prefix)

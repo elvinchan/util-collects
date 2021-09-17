@@ -1,18 +1,12 @@
 package log
 
 import (
-	"encoding/json"
 	"fmt"
-	stdlog "log"
 	"os"
-	"strings"
 	"sync/atomic"
 )
 
 type (
-	Output func(i GetInfo, level Level, fields map[string]interface{},
-		msg string)
-
 	Logger interface {
 		NewEntry() Entry
 		Entry
@@ -32,9 +26,9 @@ type (
 	}
 
 	logger struct {
-		prefix string
-		level  uint32
-		output Output
+		prefix   string
+		level    uint32
+		receiver Receiver
 	}
 
 	// Level type
@@ -83,31 +77,14 @@ func (level Level) String() string {
 const defaultSeparator = " | "
 
 func NewDefaultLogger(prefix string) *logger {
-	ol := stdlog.New(os.Stderr, "", stdlog.LstdFlags)
-	return NewLogger(prefix, Output(func(i GetInfo, level Level,
-		fields map[string]interface{}, msg string) {
-		var sb strings.Builder
-		sb.WriteString(level.String())
-		sb.WriteString(defaultSeparator)
-		sb.WriteString(i.Prefix())
-		if len(fields) > 0 {
-			fs, err := json.Marshal(fields)
-			if err == nil {
-				sb.WriteString(defaultSeparator)
-				sb.Write(fs)
-			}
-		}
-		sb.WriteString(defaultSeparator)
-		sb.WriteString(msg)
-		ol.Println(sb.String())
-	}))
+	return NewLogger(prefix, newDefaultReceiver())
 }
 
-func NewLogger(prefix string, output Output) *logger {
+func NewLogger(prefix string, receiver Receiver) *logger {
 	return &logger{
-		prefix: prefix,
-		level:  uint32(InfoLevel),
-		output: output,
+		prefix:   prefix,
+		level:    uint32(InfoLevel),
+		receiver: receiver,
 	}
 }
 
@@ -184,5 +161,5 @@ func (l *logger) logWithFields(level Level, fields map[string]interface{},
 	if level > l.Level() {
 		return
 	}
-	l.output(l, level, fields, fmt.Sprintf(format, v...))
+	l.receiver.Output(l, level, fields, fmt.Sprintf(format, v...))
 }
