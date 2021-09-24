@@ -41,12 +41,16 @@ func (e *BasicEntry) WithField(key string, value interface{}) Entry {
 }
 
 func (e *BasicEntry) WithFields(fields Fields) Entry {
-	e.Fields = fields
+	if fields != nil {
+		e.Fields = fields
+	}
 	return e
 }
 
 func (e *BasicEntry) WithError(err error) Entry {
-	e.Fields[ErrorKey] = err.Error()
+	if err == nil {
+		e.Fields[ErrorKey] = err.Error()
+	}
 	return e
 }
 
