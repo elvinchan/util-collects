@@ -120,29 +120,35 @@ func (l *BasicLogger) WithError(err error) Entry {
 }
 
 func (l *BasicLogger) Fatal(format string, v ...interface{}) {
-	l.log(FatalLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(FatalLevel, format, v...)
 	os.Exit(1)
 }
 
 func (l *BasicLogger) Panic(format string, v ...interface{}) {
-	l.log(PanicLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(PanicLevel, format, v...)
 	panic(fmt.Sprintf(format, v...))
 }
 
 func (l *BasicLogger) Error(format string, v ...interface{}) {
-	l.log(ErrorLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(ErrorLevel, format, v...)
 }
 
 func (l *BasicLogger) Warn(format string, v ...interface{}) {
-	l.log(WarnLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(WarnLevel, format, v...)
 }
 
 func (l *BasicLogger) Info(format string, v ...interface{}) {
-	l.log(InfoLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(InfoLevel, format, v...)
 }
 
 func (l *BasicLogger) Debug(format string, v ...interface{}) {
-	l.log(DebugLevel, format, v...)
+	entry := &BasicEntry{Logger: l}
+	entry.log(DebugLevel, format, v...)
 }
 
 func (l *BasicLogger) SetLevel(level Level) {
@@ -151,9 +157,4 @@ func (l *BasicLogger) SetLevel(level Level) {
 
 func (l *BasicLogger) Level() Level {
 	return Level(atomic.LoadUint32(&l.level))
-}
-
-func (l *BasicLogger) log(lvl Level, format string, v ...interface{}) {
-	entry := &BasicEntry{Logger: l}
-	entry.log(lvl, format, v...)
 }
