@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync/atomic"
@@ -11,22 +12,12 @@ type (
 		NewEntry() Entry
 		Entry
 
-		GetInfo
-		SetInfo
-	}
-
-	GetInfo interface {
-		Prefix() string
 		Level() Level
+		SetLevel(lvl Level)
 	}
 
-	SetInfo interface {
-		SetPrefix(p string)
-		SetLevel(level Level)
-	}
-
-	logger struct {
-		prefix   string
+	BasicLogger struct {
+		Prefix   string
 		level    uint32
 		receiver Receiver
 	}
@@ -56,18 +47,18 @@ const (
 // Defines the key when adding errors using WithError.
 var ErrorKey = "error"
 
-func (level Level) String() string {
-	if level == FatalLevel {
+func (lvl Level) String() string {
+	if lvl == FatalLevel {
 		return "FATAL"
-	} else if level == PanicLevel {
+	} else if lvl == PanicLevel {
 		return "PANIC"
-	} else if level == ErrorLevel {
+	} else if lvl == ErrorLevel {
 		return "ERROR"
-	} else if level == WarnLevel {
+	} else if lvl == WarnLevel {
 		return "WARN"
-	} else if level == InfoLevel {
+	} else if lvl == InfoLevel {
 		return "INFO"
-	} else if level == DebugLevel {
+	} else if lvl == DebugLevel {
 		return "DEBUG"
 	} else {
 		return ""
@@ -76,90 +67,93 @@ func (level Level) String() string {
 
 const defaultSeparator = " | "
 
-func NewDefaultLogger(prefix string) *logger {
+func NewDefaultLogger(prefix string) Logger {
 	return NewLogger(prefix, newDefaultReceiver())
 }
 
-func NewLogger(prefix string, receiver Receiver) *logger {
-	return &logger{
-		prefix:   prefix,
+func NewLogger(prefix string, receiver Receiver) Logger {
+	return &BasicLogger{
+		Prefix:   prefix,
 		level:    uint32(InfoLevel),
 		receiver: receiver,
 	}
 }
 
-func (l *logger) NewEntry() Entry {
-	return &entry{logger: l, fields: make(map[string]interface{})}
+func (l *BasicLogger) NewEntry() Entry {
+	return &BasicEntry{
+		Logger: l,
+		Fields: make(map[string]interface{}),
+	}
 }
 
-func (l *logger) WithField(key string, value interface{}) Entry {
-	return &entry{
-		logger: l,
-		fields: map[string]interface{}{
+func (l *BasicLogger) WithContext(ctx context.Context) Entry {
+	return &BasicEntry{
+		Logger: l,
+		Fields: make(map[string]interface{}),
+		Ctx:    ctx,
+	}
+}
+
+func (l *BasicLogger) WithField(key string, value interface{}) Entry {
+	return &BasicEntry{
+		Logger: l,
+		Fields: map[string]interface{}{
 			key: value,
 		},
 	}
 }
 
-func (l *logger) WithError(err error) Entry {
-	return &entry{
-		logger: l,
-		fields: map[string]interface{}{
+func (l *BasicLogger) WithFields(fields Fields) Entry {
+	return &BasicEntry{
+		Logger: l,
+		Fields: fields,
+	}
+}
+
+func (l *BasicLogger) WithError(err error) Entry {
+	return &BasicEntry{
+		Logger: l,
+		Fields: map[string]interface{}{
 			ErrorKey: err.Error(),
 		},
 	}
 }
 
-func (l *logger) Fatal(format string, v ...interface{}) {
+func (l *BasicLogger) Fatal(format string, v ...interface{}) {
 	l.log(FatalLevel, format, v...)
 	os.Exit(1)
 }
 
-func (l *logger) Panic(format string, v ...interface{}) {
+func (l *BasicLogger) Panic(format string, v ...interface{}) {
 	l.log(PanicLevel, format, v...)
 	panic(fmt.Sprintf(format, v...))
 }
 
-func (l *logger) Error(format string, v ...interface{}) {
+func (l *BasicLogger) Error(format string, v ...interface{}) {
 	l.log(ErrorLevel, format, v...)
 }
 
-func (l *logger) Warn(format string, v ...interface{}) {
+func (l *BasicLogger) Warn(format string, v ...interface{}) {
 	l.log(WarnLevel, format, v...)
 }
 
-func (l *logger) Info(format string, v ...interface{}) {
+func (l *BasicLogger) Info(format string, v ...interface{}) {
 	l.log(InfoLevel, format, v...)
 }
 
-func (l *logger) Debug(format string, v ...interface{}) {
+func (l *BasicLogger) Debug(format string, v ...interface{}) {
 	l.log(DebugLevel, format, v...)
 }
 
-func (l *logger) Prefix() string {
-	return l.prefix
-}
-
-func (l *logger) SetPrefix(p string) {
-	l.prefix = p
-}
-
-func (l *logger) SetLevel(level Level) {
+func (l *BasicLogger) SetLevel(level Level) {
 	atomic.StoreUint32(&l.level, uint32(level))
 }
 
-func (l *logger) Level() Level {
+func (l *BasicLogger) Level() Level {
 	return Level(atomic.LoadUint32(&l.level))
 }
 
-func (l *logger) log(level Level, format string, v ...interface{}) {
-	l.logWithFields(level, nil, fmt.Sprintf(format, v...))
-}
-
-func (l *logger) logWithFields(level Level, fields map[string]interface{},
-	format string, v ...interface{}) {
-	if level > l.Level() {
-		return
-	}
-	l.receiver.Output(l, level, fields, fmt.Sprintf(format, v...))
+func (l *BasicLogger) log(lvl Level, format string, v ...interface{}) {
+	entry := &BasicEntry{Logger: l}
+	entry.log(lvl, format, v...)
 }

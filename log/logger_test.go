@@ -6,13 +6,11 @@ import (
 )
 
 type testReceiver struct {
-	outputer func(i GetInfo, level Level, fields map[string]interface{},
-		msg string)
+	outputer func(entry *BasicEntry, lvl Level, msg string)
 }
 
-func (r *testReceiver) Output(i GetInfo, level Level,
-	fields map[string]interface{}, msg string) {
-	r.outputer(i, level, fields, msg)
+func (r *testReceiver) Output(entry *BasicEntry, lvl Level, msg string) {
+	r.outputer(entry, lvl, msg)
 }
 
 func TestCustomizedReceiver(t *testing.T) {
@@ -43,14 +41,13 @@ func TestCustomizedReceiver(t *testing.T) {
 		t.Run(fmt.Sprintf("Case-%d", i), func(t *testing.T) {
 			resultCh := make(chan string, 1)
 			fieldsCh := make(chan map[string]interface{}, 1)
-			l := NewLogger("test", &testReceiver{
-				outputer: func(i GetInfo, level Level, fields map[string]interface{}, msg string) {
-					resultCh <- fmt.Sprintf("%s %s - %s", level, i.Prefix(), msg)
-					fieldsCh <- fields
+			l := NewLogger(c.Prefix, &testReceiver{
+				outputer: func(entry *BasicEntry, lvl Level, msg string) {
+					resultCh <- fmt.Sprintf("%s %s - %s", lvl, entry.Logger.Prefix, msg)
+					fieldsCh <- entry.Fields
 				},
 			})
 			l.SetLevel(DebugLevel)
-			l.SetPrefix(c.Prefix)
 			e := l.NewEntry()
 			for k, v := range c.Fields {
 				e.WithField(k, v)

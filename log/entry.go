@@ -1,13 +1,18 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
 
 type (
+	Fields map[string]interface{}
+
 	Entry interface {
+		WithContext(ctx context.Context) Entry
 		WithField(key string, value interface{}) Entry
+		WithFields(fields Fields) Entry
 		WithError(err error) Entry
 
 		Fatal(format string, v ...interface{})
@@ -18,44 +23,62 @@ type (
 		Debug(format string, v ...interface{})
 	}
 
-	entry struct {
-		logger *logger
-		fields map[string]interface{}
+	BasicEntry struct {
+		Logger *BasicLogger
+		Fields map[string]interface{}
+		Ctx    context.Context
 	}
 )
 
-func (e *entry) WithField(key string, value interface{}) Entry {
-	e.fields[key] = value
+func (e *BasicEntry) WithContext(ctx context.Context) Entry {
+	e.Ctx = ctx
 	return e
 }
 
-func (e *entry) WithError(err error) Entry {
-	e.fields[ErrorKey] = err.Error()
+func (e *BasicEntry) WithField(key string, value interface{}) Entry {
+	e.Fields[key] = value
 	return e
 }
 
-func (e *entry) Fatal(format string, v ...interface{}) {
-	e.logger.logWithFields(FatalLevel, e.fields, format, v...)
+func (e *BasicEntry) WithFields(fields Fields) Entry {
+	e.Fields = fields
+	return e
+}
+
+func (e *BasicEntry) WithError(err error) Entry {
+	e.Fields[ErrorKey] = err.Error()
+	return e
+}
+
+func (e *BasicEntry) Fatal(format string, v ...interface{}) {
+	e.log(FatalLevel, format, v...)
 	os.Exit(1)
 }
 
-func (e *entry) Panic(format string, v ...interface{}) {
-	e.logger.logWithFields(PanicLevel, e.fields, format, v...)
+func (e *BasicEntry) Panic(format string, v ...interface{}) {
+	e.log(PanicLevel, format, v...)
 	panic(fmt.Sprintf(format, v...))
 }
 
-func (e *entry) Error(format string, v ...interface{}) {
-	e.logger.logWithFields(ErrorLevel, e.fields, format, v...)
+func (e *BasicEntry) Error(format string, v ...interface{}) {
+	e.log(ErrorLevel, format, v...)
 }
 
-func (e *entry) Warn(format string, v ...interface{}) {
-	e.logger.logWithFields(WarnLevel, e.fields, format, v...)
+func (e *BasicEntry) Warn(format string, v ...interface{}) {
+	e.log(WarnLevel, format, v...)
 }
 
-func (e *entry) Info(format string, v ...interface{}) {
-	e.logger.logWithFields(InfoLevel, e.fields, format, v...)
+func (e *BasicEntry) Info(format string, v ...interface{}) {
+	e.log(InfoLevel, format, v...)
 }
 
-func (e *entry) Debug(format string, v ...interface{}) {
-	e.logger.logWithFields(DebugLevel, e.fields, format, v...)
+func (e *BasicEntry) Debug(format string, v ...interface{}) {
+	e.log(DebugLevel, format, v...)
+}
+
+func (e *BasicEntry) log(lvl Level, format string, v ...interface{}) {
+	if lvl > e.Logger.Level() {
+		return
+	}
+	e.Logger.receiver.Output(e, lvl, fmt.Sprintf(format, v...))
 }

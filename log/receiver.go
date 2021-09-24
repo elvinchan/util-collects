@@ -8,21 +8,20 @@ import (
 )
 
 type Receiver interface {
-	Output(i GetInfo, level Level, fields map[string]interface{}, msg string)
+	Output(entry *BasicEntry, lvl Level, msg string)
 }
 
 type receiver struct {
 	logger *stdlog.Logger
 }
 
-func (r *receiver) Output(i GetInfo, level Level, fields map[string]interface{},
-	msg string) {
+func (r *receiver) Output(entry *BasicEntry, lvl Level, msg string) {
 	var sb strings.Builder
-	sb.WriteString(level.String())
+	sb.WriteString(lvl.String())
 	sb.WriteString(defaultSeparator)
-	sb.WriteString(i.Prefix())
-	if len(fields) > 0 {
-		fs, err := json.Marshal(fields)
+	sb.WriteString(entry.Logger.Prefix)
+	if len(entry.Fields) > 0 {
+		fs, err := json.Marshal(entry.Fields)
 		if err == nil {
 			sb.WriteString(defaultSeparator)
 			sb.Write(fs)
