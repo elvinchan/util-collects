@@ -48,7 +48,7 @@ func (e *BasicEntry) WithFields(fields Fields) Entry {
 }
 
 func (e *BasicEntry) WithError(err error) Entry {
-	if err == nil {
+	if err != nil {
 		e.Fields[ErrorKey] = err.Error()
 	}
 	return e
