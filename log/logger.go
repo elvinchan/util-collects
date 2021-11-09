@@ -114,13 +114,10 @@ func (l *BasicLogger) WithFields(fields Fields) Entry {
 }
 
 func (l *BasicLogger) WithError(err error) Entry {
-	if err == nil {
-		return l.NewEntry()
-	}
 	return &BasicEntry{
 		Logger: l,
 		Fields: map[string]interface{}{
-			ErrorKey: err.Error(),
+			ErrorKey: err,
 		},
 	}
 }

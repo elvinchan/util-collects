@@ -50,7 +50,7 @@ func TestCustomizedReceiver(t *testing.T) {
 			l.SetLevel(DebugLevel)
 			e := l.NewEntry()
 			for k, v := range c.Fields {
-				e.WithField(k, v)
+				e = e.WithField(k, v)
 			}
 
 			switch c.Level {
@@ -69,6 +69,29 @@ func TestCustomizedReceiver(t *testing.T) {
 			fields := <-fieldsCh
 			if len(fields) != len(c.Fields) {
 				t.Errorf("fields length not match, expect %d, got %d", len(c.Fields), len(fields))
+			}
+
+			e = l.NewEntry()
+			for k, v := range c.Fields {
+				e.WithField(k, v)
+			}
+
+			switch c.Level {
+			case DebugLevel:
+				e.Debug(c.Format, c.Args...)
+			case InfoLevel:
+				e.Info(c.Format, c.Args...)
+			case WarnLevel:
+				e.Warn(c.Format, c.Args...)
+			case ErrorLevel:
+				e.Error(c.Format, c.Args...)
+			}
+			if msg := <-resultCh; msg != c.Expect {
+				t.Errorf("expect %s, got %s", c.Expect, msg)
+			}
+			fields = <-fieldsCh
+			if len(fields) != 0 {
+				t.Errorf("fields length not match, expect %d, got %d", 0, len(fields))
 			}
 		})
 	}

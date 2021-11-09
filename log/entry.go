@@ -31,27 +31,26 @@ type (
 )
 
 func (e *BasicEntry) WithContext(ctx context.Context) Entry {
-	e.Ctx = ctx
-	return e
+	return &BasicEntry{Logger: e.Logger, Fields: e.Fields, Ctx: ctx}
 }
 
 func (e *BasicEntry) WithField(key string, value interface{}) Entry {
-	e.Fields[key] = value
-	return e
+	return e.WithFields(map[string]interface{}{key: value})
 }
 
 func (e *BasicEntry) WithFields(fields Fields) Entry {
-	if fields != nil {
-		e.Fields = fields
+	data := make(map[string]interface{}, len(e.Fields)+len(fields))
+	for k, v := range e.Fields {
+		data[k] = v
 	}
-	return e
+	for k, v := range fields {
+		data[k] = v
+	}
+	return &BasicEntry{Logger: e.Logger, Fields: data, Ctx: e.Ctx}
 }
 
 func (e *BasicEntry) WithError(err error) Entry {
-	if err != nil {
-		e.Fields[ErrorKey] = err.Error()
-	}
-	return e
+	return e.WithField(ErrorKey, err)
 }
 
 func (e *BasicEntry) Fatal(format string, v ...interface{}) {
