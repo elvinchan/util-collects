@@ -14,8 +14,8 @@ type Cache struct {
 	cap      int
 	ttl      time.Duration
 	items    map[interface{}]Item
-	lruList  *list.List // realize LikedHashMap with items
-	ttlList  *list.List // realize LikedHashMap with items
+	lruList  *list.List // realize LinkedHashMap with items
+	ttlList  *list.List // realize LinkedHashMap with items
 	timer    *time.Timer
 	cleaning bool
 	shutdown chan struct{}
@@ -88,12 +88,6 @@ func (c *Cache) Set(key, value interface{}) {
 		item.expireAt = time.Now().Add(c.ttl)
 		item.ttl = c.ttlList.PushFront(&ent)
 		if !c.cleaning {
-			if c.timer == nil {
-				c.timer = time.NewTimer(c.ttl)
-			} else {
-				// reset timer
-				c.timer.Reset(c.ttl)
-			}
 			c.cleaning = true
 			go c.startCleanup()
 		}
@@ -154,45 +148,27 @@ func (c *Cache) remove(key interface{}) {
 // Len returns the number of items in the cache
 func (c *Cache) Len() int {
 	c.RLock()
-	lens := len(c.items)
-	c.RUnlock()
-	return lens
-}
-
-// Reset remove all data from Cache so it can use again
-func (c *Cache) Reset() {
-	if !c.timer.Stop() {
-		select {
-		case <-c.timer.C: // try to drain from the channel
-		default:
-		}
-	}
-	c.Lock()
-	c.items = make(map[interface{}]Item)
-	if c.lruList != nil {
-		c.lruList.Init()
-	}
-	if c.ttlList != nil {
-		c.ttlList.Init()
-	}
-	c.Unlock()
+	defer c.RUnlock()
+	return len(c.items)
 }
 
 // Close remove all data from Cache and exit cleanup.
 // Cache cannot use any more after close
 func (c *Cache) Close() {
-	c.Lock()
 	close(c.shutdown)
+	c.Lock()
 	c.items = nil
 	c.lruList = nil
 	c.ttlList = nil
-	c.cleaning = false
 	c.Unlock()
 }
 
 // cleanup cleanup expired items and reset timer for next cleanup
 // if there's no more data in ttlList, exit
 func (c *Cache) cleanup() bool {
+	if c.ttlList == nil {
+		return true
+	}
 	for {
 		if e := c.ttlList.Back(); e != nil {
 			key := e.Value.(*entry).key
@@ -203,13 +179,6 @@ func (c *Cache) cleanup() bool {
 			} else if d < defaultMinGap {
 				d = defaultMinGap
 			}
-			// seems not necessary to stop
-			// if !c.timer.Stop() {
-			// 	select {
-			// 	case <-c.timer.C: // try to drain from the channel
-			// 	default:
-			// 	}
-			// }
 			c.timer.Reset(d)
 			return false
 		}
@@ -220,6 +189,11 @@ func (c *Cache) cleanup() bool {
 // TODO: timewheel
 // https://github.com/rfyiamcool/golib/blob/29fd190076471bbc97809eba72c25cacd51dccf5/timewheel/tw.go
 func (c *Cache) startCleanup() {
+	if c.timer == nil {
+		c.timer = time.NewTimer(c.ttl)
+	} else {
+		c.timer.Reset(c.ttl)
+	}
 	for {
 		select {
 		case <-c.shutdown:
@@ -228,8 +202,8 @@ func (c *Cache) startCleanup() {
 		case <-c.timer.C:
 			c.Lock()
 			if c.cleanup() {
-				c.Unlock()
 				c.cleaning = false
+				c.Unlock()
 				return
 			}
 			c.Unlock()

@@ -23,21 +23,27 @@ func NewCounter(d time.Duration) *Counter {
 
 func (c *Counter) Incr() {
 	c.Lock()
-	defer c.Unlock()
 	c.records = append(c.records, time.Now())
 	if !c.cleaning {
-		if c.timer == nil {
-			c.timer = time.NewTimer(c.ttl)
-		} else {
-			c.timer.Reset(c.ttl)
-		}
 		c.cleaning = true
 		go c.startCleanup()
 	}
+	c.Unlock()
 }
 
-func (t *Counter) Len() int {
-	return len(t.records)
+func (c *Counter) Len() int {
+	c.RLock()
+	defer c.RUnlock()
+	return len(c.records)
+}
+
+// Close remove all data from Counter and exit cleanup.
+// Counter cannot use any more after close
+func (c *Counter) Close() {
+	close(c.shutdown)
+	c.Lock()
+	c.records = nil
+	c.Unlock()
 }
 
 func (t *Counter) pop() {
@@ -71,6 +77,11 @@ func (c *Counter) cleanup() bool {
 }
 
 func (c *Counter) startCleanup() {
+	if c.timer == nil {
+		c.timer = time.NewTimer(c.ttl)
+	} else {
+		c.timer.Reset(c.ttl)
+	}
 	for {
 		select {
 		case <-c.shutdown:
@@ -79,8 +90,8 @@ func (c *Counter) startCleanup() {
 		case <-c.timer.C:
 			c.Lock()
 			if c.cleanup() {
-				c.Unlock()
 				c.cleaning = false
+				c.Unlock()
 				return
 			}
 			c.Unlock()

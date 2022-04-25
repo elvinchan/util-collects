@@ -27,7 +27,7 @@ func Delay(duration time.Duration) Strategy {
 			case <-ctx.Done():
 				keep = false
 			}
-			stopTimer(timer)
+			timer.Stop()
 		}
 		return keep
 	}
@@ -50,7 +50,7 @@ func Wait(durations ...time.Duration) Strategy {
 			case <-ctx.Done():
 				keep = false
 			}
-			stopTimer(timer)
+			timer.Stop()
 		}
 		return keep
 	}
@@ -76,6 +76,7 @@ func BackoffJitter(algorithm Algorithm, transformation Transformation) Strategy 
 			case <-ctx.Done():
 				keep = false
 			}
+			timer.Stop()
 		}
 		return keep
 	}
@@ -104,16 +105,8 @@ func BackoffLimitJitter(algorithm Algorithm, limit time.Duration,
 			case <-ctx.Done():
 				keep = false
 			}
+			timer.Stop()
 		}
 		return keep
-	}
-}
-
-func stopTimer(t *time.Timer) {
-	if !t.Stop() {
-		select {
-		case <-t.C:
-		default:
-		}
 	}
 }

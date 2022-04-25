@@ -118,18 +118,3 @@ func TestClose(t *testing.T) {
 	testkit.Assert(t, c.items == nil)
 	testkit.Assert(t, runtime.NumGoroutine() == initNum)
 }
-
-func TestReset(t *testing.T) {
-	c := NewCache(CacheWithTTL(time.Millisecond), CacheWithLRU(2))
-
-	c.Set(1, "hello")
-	testkit.Assert(t, c.Len() == 1)
-	v, ok := c.Get(1)
-	testkit.Assert(t, ok)
-	testkit.Assert(t, v.(string) == "hello")
-
-	c.Reset()
-	testkit.Assert(t, c.Len() == 0)
-	testkit.Assert(t, c.lruList.Len() == 0)
-	testkit.Assert(t, c.ttlList.Len() == 0)
-}
