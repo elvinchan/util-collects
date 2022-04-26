@@ -19,7 +19,7 @@ func TestCASMutexTryLockTimeout(t *testing.T) {
 	mu := NewCASMutex()
 	mu.Lock()
 	go func() {
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(2 * time.Millisecond)
 		mu.Unlock()
 	}()
 	if mu.TryLockWithTimeout(500 * time.Microsecond) {

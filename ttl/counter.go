@@ -2,6 +2,7 @@ package ttl
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -10,7 +11,7 @@ type Counter struct {
 	ttl      time.Duration
 	records  []time.Time
 	timer    *time.Timer
-	cleaning bool
+	cleaning uint32 // 0 -> false, 1 -> true
 	shutdown chan struct{}
 }
 
@@ -24,11 +25,10 @@ func NewCounter(d time.Duration) *Counter {
 func (c *Counter) Incr() {
 	c.Lock()
 	c.records = append(c.records, time.Now())
-	if !c.cleaning {
-		c.cleaning = true
+	c.Unlock()
+	if atomic.CompareAndSwapUint32(&c.cleaning, 0, 1) {
 		go c.startCleanup()
 	}
-	c.Unlock()
 }
 
 func (c *Counter) Len() int {
@@ -88,13 +88,10 @@ func (c *Counter) startCleanup() {
 			c.timer.Stop()
 			return
 		case <-c.timer.C:
-			c.Lock()
 			if c.cleanup() {
-				c.cleaning = false
-				c.Unlock()
+				atomic.StoreUint32(&c.cleaning, 0)
 				return
 			}
-			c.Unlock()
 		}
 	}
 }

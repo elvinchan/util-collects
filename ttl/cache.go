@@ -3,6 +3,7 @@ package ttl
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type Cache struct {
 	lruList  *list.List // realize LinkedHashMap with items
 	ttlList  *list.List // realize LinkedHashMap with items
 	timer    *time.Timer
-	cleaning bool
+	cleaning uint32 // 0 -> false, 1 -> true
 	shutdown chan struct{}
 }
 
@@ -87,8 +88,7 @@ func (c *Cache) Set(key, value interface{}) {
 	if c.ttlList != nil {
 		item.expireAt = time.Now().Add(c.ttl)
 		item.ttl = c.ttlList.PushFront(&ent)
-		if !c.cleaning {
-			c.cleaning = true
+		if atomic.CompareAndSwapUint32(&c.cleaning, 0, 1) {
 			go c.startCleanup()
 		}
 	}
@@ -163,26 +163,38 @@ func (c *Cache) Close() {
 	c.Unlock()
 }
 
+func (c *Cache) ttlNextExpire() (bool, time.Duration) {
+	c.Lock()
+	defer c.Unlock()
+	if c.ttlList == nil {
+		return true, 0
+	}
+	if e := c.ttlList.Back(); e != nil {
+		key := e.Value.(*entry).key
+		d := time.Until(c.items[key].expireAt)
+		if d < 0 {
+			c.remove(key)
+		}
+		return false, d
+	}
+	return true, 0
+}
+
 // cleanup cleanup expired items and reset timer for next cleanup
 // if there's no more data in ttlList, exit
 func (c *Cache) cleanup() bool {
-	if c.ttlList == nil {
-		return true
-	}
 	for {
-		if e := c.ttlList.Back(); e != nil {
-			key := e.Value.(*entry).key
-			d := time.Until(c.items[key].expireAt)
-			if d <= 0 {
-				c.remove(key)
-				continue
-			} else if d < defaultMinGap {
-				d = defaultMinGap
-			}
-			c.timer.Reset(d)
-			return false
+		empty, d := c.ttlNextExpire()
+		if empty {
+			return true
 		}
-		return true
+		if d <= 0 {
+			continue
+		} else if d < defaultMinGap {
+			d = defaultMinGap
+		}
+		c.timer.Reset(d)
+		return false
 	}
 }
 
@@ -200,13 +212,10 @@ func (c *Cache) startCleanup() {
 			c.timer.Stop()
 			return
 		case <-c.timer.C:
-			c.Lock()
 			if c.cleanup() {
-				c.cleaning = false
-				c.Unlock()
+				atomic.StoreUint32(&c.cleaning, 0)
 				return
 			}
-			c.Unlock()
 		}
 	}
 }
