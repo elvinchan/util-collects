@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -41,7 +42,7 @@ func TestCustomizedReceiver(t *testing.T) {
 		t.Run(fmt.Sprintf("Case-%d", i), func(t *testing.T) {
 			resultCh := make(chan string, 1)
 			fieldsCh := make(chan map[string]interface{}, 1)
-			l := NewLogger(c.Prefix, &testReceiver{
+			l := NewBasicLogger(c.Prefix, &testReceiver{
 				outputer: func(entry *BasicEntry, lvl Level, msg string) {
 					resultCh <- fmt.Sprintf("%s %s - %s", lvl, entry.Logger.Prefix, msg)
 					fieldsCh <- entry.Fields
@@ -95,4 +96,17 @@ func TestCustomizedReceiver(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDiscard(t *testing.T) {
+	l := NewDiscardLogger()
+	l.Debug("d")
+	l.Info("d")
+	l.Warn("d")
+	l.Error("d")
+	l.Panic("d")
+	l.Fatal("d")
+
+	l.WithContext(context.Background()).WithField("k", "v").
+		WithError(nil).Debug("ds")
 }
