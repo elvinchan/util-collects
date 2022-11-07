@@ -22,7 +22,7 @@ func (c *As) fail(title string, details []string, msgAndArgs ...interface{}) {
 	c.TB.Error(c.info.String())
 	c.info.Reset()
 
-	if c.failDirectly {
+	if c.failDirectly.Load() {
 		c.FailNow()
 	} else {
 		c.Fail()

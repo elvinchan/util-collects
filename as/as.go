@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elvinchan/util-collects/sync/atomic"
 )
 
 // As provides check methods around the testing.TB interface.
@@ -13,22 +15,18 @@ type As struct {
 	testing.TB
 
 	skipCallers  int
-	failDirectly bool
+	failDirectly atomic.Bool
 	info         strings.Builder
 }
 
 // New create a new As object for the specified testing.TB.
-func New(t testing.TB, opts ...Option) *As {
-	a := &As{
+func New(t testing.TB) *As {
+	return &As{
 		t,
 		3,
-		false,
+		atomic.Bool{},
 		strings.Builder{},
 	}
-	for _, opt := range opts {
-		opt(a)
-	}
-	return a
 }
 
 // Equal checks that two objects are equal.

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elvinchan/util-collects/sync/atomic"
 )
 
 // directlyAs create a new directly failed As object.
@@ -12,7 +14,7 @@ func directlyAs(t testing.TB) *As {
 	return &As{
 		t,
 		4,
-		true,
+		atomic.Bool{},
 		strings.Builder{},
 	}
 }
