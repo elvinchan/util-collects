@@ -1,4 +1,4 @@
-package mutex
+package sync
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func TestCASMutexUnlockTwice(t *testing.T) {
 	mu.Lock()
 	defer func() {
 		if x := recover(); x != nil {
-			if x != "lock: unlock of unlocked mutex" {
+			if x != "sync: unlock of unlocked mutex" {
 				t.Errorf("unexpect panic")
 			}
 		} else {

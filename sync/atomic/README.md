@@ -1,0 +1,1 @@
+migrate from Go 1.19 sync/atomic/type.go source code for compatibility of previous Go version
