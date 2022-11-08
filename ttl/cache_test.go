@@ -2,103 +2,102 @@ package ttl
 
 import (
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/elvinchan/util-collects/testkit"
+	"github.com/elvinchan/util-collects/as"
 )
 
 func TestSetGet(t *testing.T) {
 	t.Run("Normal", func(t *testing.T) {
 		c := NewCache()
-		testkit.Assert(t, c.items != nil)
-		testkit.Assert(t, c.shutdown != nil)
+		as.NotEqual(t, c.items, nil)
+		as.NotEqual(t, c.shutdown, nil)
 
 		c.Set(1, "hello")
-		testkit.Assert(t, c.Len() == 1)
+		as.Equal(t, c.Len(), 1)
 		v, ok := c.Get(1)
-		testkit.Assert(t, ok)
-		testkit.Assert(t, v.(string) == "hello")
+		as.True(t, ok)
+		as.Equal(t, v.(string), "hello")
 	})
 
 	t.Run("TTL", func(t *testing.T) {
 		c := NewCache(CacheWithTTL(time.Millisecond))
-		testkit.Assert(t, c.ttl == time.Millisecond*10)
-		testkit.Assert(t, c.ttlList != nil)
+		as.Equal(t, c.ttl, time.Millisecond*10)
+		as.NotEqual(t, c.ttlList, nil)
 
-		initNum := runtime.NumGoroutine()
 		c.Set(1, "hello")
-		testkit.Assert(t, c.Len() == 1)
+		as.Equal(t, c.Len(), 1)
 		v, ok := c.Get(1)
-		testkit.Assert(t, ok)
-		testkit.Assert(t, v.(string) == "hello")
-		testkit.Assert(t, runtime.NumGoroutine() == initNum+1)
+		as.True(t, ok)
+		as.Equal(t, v.(string), "hello")
+		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
 		time.Sleep(time.Millisecond * 20)
-		testkit.Assert(t, c.Len() == 0)
+		as.Equal(t, c.Len(), 0)
 		_, ok = c.Get(1)
-		testkit.Assert(t, !ok)
-		testkit.Assert(t, runtime.NumGoroutine() == initNum)
+		as.False(t, ok)
+		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(0))
 	})
 
 	t.Run("LRU", func(t *testing.T) {
 		c := NewCache(CacheWithLRU(2))
-		testkit.Assert(t, c.cap == 2)
-		testkit.Assert(t, c.lruList != nil)
+		as.Equal(t, c.cap, 2)
+		as.NotEqual(t, c.lruList, nil)
 
 		c.Set(1, "hello")
 		c.Set("a", "world")
-		testkit.Assert(t, c.Len() == 2)
+		as.Equal(t, c.Len(), 2)
 		_, ok := c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get("a")
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 
 		c.Set(2, "cache")
-		testkit.Assert(t, c.Len() == 2)
+		as.Equal(t, c.Len(), 2)
 		_, ok = c.Get(2)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get("a")
-		testkit.Assert(t, !ok)
+		as.False(t, ok)
 	})
 
 	t.Run("TTL+LRU", func(t *testing.T) {
 		c := NewCache(CacheWithTTL(time.Millisecond), CacheWithLRU(2))
-		testkit.Assert(t, c.ttl == time.Millisecond*10)
-		testkit.Assert(t, c.ttlList != nil)
-		testkit.Assert(t, c.cap == 2)
-		testkit.Assert(t, c.lruList != nil)
+		as.Equal(t, c.ttl, time.Millisecond*10)
+		as.NotEqual(t, c.ttlList, nil)
+		as.Equal(t, c.cap, 2)
+		as.NotEqual(t, c.lruList, nil)
 
-		initNum := runtime.NumGoroutine()
 		c.Set(1, "hello")
 		c.Set("a", "world")
-		testkit.Assert(t, c.Len() == 2)
+		as.Equal(t, c.Len(), 2)
 		_, ok := c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get("a")
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 
 		c.Set(2, "cache")
-		testkit.Assert(t, c.Len() == 2)
+		as.Equal(t, c.Len(), 2)
 		_, ok = c.Get(2)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get(1)
-		testkit.Assert(t, ok)
+		as.True(t, ok)
 		_, ok = c.Get("a")
-		testkit.Assert(t, !ok)
-		testkit.Assert(t, runtime.NumGoroutine() == initNum+1)
+		as.False(t, ok)
+		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
 		time.Sleep(time.Millisecond * 20)
-		testkit.Assert(t, c.Len() == 0)
+		as.Equal(t, c.Len(), 0)
 		_, ok = c.Get(1)
-		testkit.Assert(t, !ok)
-		testkit.Assert(t, runtime.NumGoroutine() == initNum)
+		as.False(t, ok)
+		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(0))
 	})
 }
 
@@ -107,14 +106,14 @@ func TestClose(t *testing.T) {
 
 	initNum := runtime.NumGoroutine()
 	c.Set(1, "hello")
-	testkit.Assert(t, c.Len() == 1)
+	as.Equal(t, c.Len(), 1)
 	v, ok := c.Get(1)
-	testkit.Assert(t, ok)
-	testkit.Assert(t, v.(string) == "hello")
-	testkit.Assert(t, runtime.NumGoroutine() == initNum+1)
+	as.True(t, ok)
+	as.Equal(t, v.(string), "hello")
+	as.Equal(t, runtime.NumGoroutine(), initNum+1)
 
 	c.Close()
 	time.Sleep(time.Millisecond)
-	testkit.Assert(t, c.items == nil)
-	testkit.Assert(t, runtime.NumGoroutine() == initNum)
+	as.Equal(t, len(c.items), 0)
+	as.Equal(t, runtime.NumGoroutine(), initNum)
 }

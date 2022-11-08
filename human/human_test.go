@@ -3,7 +3,7 @@ package human
 import (
 	"testing"
 
-	"github.com/elvinchan/util-collects/testkit"
+	"github.com/elvinchan/util-collects/as"
 )
 
 // IEC Sizes.
@@ -30,7 +30,9 @@ const (
 )
 
 func TestBytes(t *testing.T) {
-	testkit.List{
+	var l = []struct {
+		name, got, exp string
+	}{
 		{"bytes(0)", Bytes(0), "0 B"},
 		{"bytes(1)", Bytes(1), "1 B"},
 		{"bytes(803)", Bytes(803), "803 B"},
@@ -84,5 +86,10 @@ func TestBytes(t *testing.T) {
 		{"bytes(5.5GiB)", IBytes(5.5 * GiByte), "5.5 GiB"},
 
 		{"bytes(5.5GB)", Bytes(5.5 * GByte), "5.5 GB"},
-	}.Validate(t)
+	}
+	for _, lt := range l {
+		t.Run(lt.name, func(t *testing.T) {
+			as.Equal(t, lt.got, lt.exp)
+		})
+	}
 }

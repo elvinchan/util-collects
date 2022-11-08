@@ -1,3 +1,4 @@
+//go:build !windows
 // +build !windows
 
 package command
@@ -8,33 +9,33 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elvinchan/util-collects/testkit"
+	"github.com/elvinchan/util-collects/as"
 )
 
 func TestStart(t *testing.T) {
 	t.Run("Normal", func(t *testing.T) {
 		var buf bytes.Buffer
 		p, err := Start("echo", StartWithArgs("hello"), StartWithStdout(&buf))
-		testkit.Assert(t, err == nil)
+		as.NoError(t, err)
 		pgid, err := syscall.Getpgid(p.Process.Pid)
-		testkit.Assert(t, err == nil)
+		as.NoError(t, err)
 		ppgid, err := syscall.Getpgid(syscall.Getpid())
-		testkit.Assert(t, err == nil)
-		testkit.Assert(t, pgid == ppgid)
+		as.NoError(t, err)
+		as.Equal(t, pgid, ppgid)
 		time.Sleep(time.Millisecond * 500)
-		testkit.Assert(t, buf.String() == "hello\n")
+		as.Equal(t, buf.String(), "hello\n")
 	})
 
 	t.Run("Detach", func(t *testing.T) {
 		var buf bytes.Buffer
 		p, err := Start("echo", StartWithArgs("hello"), StartWithStdout(&buf), StartWithDetach())
-		testkit.Assert(t, err == nil)
+		as.NoError(t, err)
 		pgid, err := syscall.Getpgid(p.Process.Pid)
-		testkit.Assert(t, err == nil)
+		as.NoError(t, err)
 		ppgid, err := syscall.Getpgid(syscall.Getpid())
-		testkit.Assert(t, err == nil)
-		testkit.Assert(t, pgid != ppgid)
+		as.NoError(t, err)
+		as.NotEqual(t, pgid, ppgid)
 		time.Sleep(time.Millisecond * 500)
-		testkit.Assert(t, buf.String() == "hello\n")
+		as.Equal(t, buf.String(), "hello\n")
 	})
 }
