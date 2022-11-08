@@ -20,15 +20,15 @@ func directlyAs(t testing.TB) *As {
 }
 
 // Equal asserts that two objects are equal.
-func Equal(t testing.TB, want, got interface{}, msgAndArgs ...interface{}) {
+func Equal(t testing.TB, got, want interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	directlyAs(t).Equal(want, got, msgAndArgs...)
+	directlyAs(t).Equal(got, want, msgAndArgs...)
 }
 
 // Equal asserts that two objects are not equal.
-func NotEqual(t testing.TB, want, got interface{}, msgAndArgs ...interface{}) {
+func NotEqual(t testing.TB, got, want interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	directlyAs(t).NotEqual(want, got, msgAndArgs...)
+	directlyAs(t).NotEqual(got, want, msgAndArgs...)
 }
 
 // Error asserts that a function returned an error (i.e. not `nil`).

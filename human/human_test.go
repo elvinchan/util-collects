@@ -31,7 +31,7 @@ const (
 
 func TestBytes(t *testing.T) {
 	var l = []struct {
-		name, got, exp string
+		name, got, want string
 	}{
 		{"bytes(0)", Bytes(0), "0 B"},
 		{"bytes(1)", Bytes(1), "1 B"},
@@ -89,7 +89,7 @@ func TestBytes(t *testing.T) {
 	}
 	for _, lt := range l {
 		t.Run(lt.name, func(t *testing.T) {
-			as.Equal(t, lt.got, lt.exp)
+			as.Equal(t, lt.got, lt.want)
 		})
 	}
 }

@@ -30,7 +30,7 @@ func New(t testing.TB) *As {
 }
 
 // Equal checks that two objects are equal.
-func (c *As) Equal(want, got interface{}, msgAndArgs ...interface{}) {
+func (c *As) Equal(got, want interface{}, msgAndArgs ...interface{}) {
 	c.Helper()
 	if err := validateEqualArgs(want, got); err != nil {
 		c.fail("invalid operation", []string{
@@ -47,7 +47,7 @@ func (c *As) Equal(want, got interface{}, msgAndArgs ...interface{}) {
 }
 
 // Equal checks that two objects are not equal.
-func (c *As) NotEqual(want, got interface{}, msgAndArgs ...interface{}) {
+func (c *As) NotEqual(got, want interface{}, msgAndArgs ...interface{}) {
 	c.Helper()
 	if err := validateEqualArgs(want, got); err != nil {
 		c.fail("invalid operation", []string{
