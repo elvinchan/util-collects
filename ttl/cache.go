@@ -11,7 +11,7 @@ var defaultMinGap = time.Second
 
 // Cache is a synchronised map of items that auto-expire once stale
 type Cache struct {
-	sync.RWMutex
+	mu       sync.RWMutex
 	cap      int
 	ttl      time.Duration
 	items    map[interface{}]Item
@@ -68,8 +68,8 @@ func NewCache(opts ...CacheOption) *Cache {
 
 // Set is a thread-safe way to set item to the map
 func (c *Cache) Set(key, value interface{}) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// already exist
 	if item, ok := c.items[key]; ok {
 		if c.lruList != nil {
@@ -109,8 +109,8 @@ func (c *Cache) Set(key, value interface{}) {
 // Get is a thread-safe way to lookup items.
 // Every lookup, also hence extending it's life if ttl is enabled
 func (c *Cache) Get(key interface{}) (interface{}, bool) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	item, ok := c.items[key]
 	if !ok {
@@ -130,9 +130,9 @@ func (c *Cache) Get(key interface{}) (interface{}, bool) {
 
 // Remove removes item from Cache
 func (c *Cache) Remove(key interface{}) {
-	c.Lock()
+	c.mu.Lock()
 	c.remove(key)
-	c.Unlock()
+	c.mu.Unlock()
 }
 
 func (c *Cache) remove(key interface{}) {
@@ -147,8 +147,8 @@ func (c *Cache) remove(key interface{}) {
 
 // Len returns the number of items in the cache
 func (c *Cache) Len() int {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return len(c.items)
 }
 
@@ -156,16 +156,16 @@ func (c *Cache) Len() int {
 // Cache cannot use any more after close
 func (c *Cache) Close() {
 	close(c.shutdown)
-	c.Lock()
+	c.mu.Lock()
 	c.items = nil
 	c.lruList = nil
 	c.ttlList = nil
-	c.Unlock()
+	c.mu.Unlock()
 }
 
 func (c *Cache) ttlNextExpire() (bool, time.Duration) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.ttlList == nil {
 		return true, 0
 	}

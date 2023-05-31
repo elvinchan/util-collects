@@ -7,7 +7,7 @@ import (
 )
 
 type Counter struct {
-	sync.RWMutex
+	mu       sync.RWMutex
 	ttl      time.Duration
 	records  []time.Time
 	timer    *time.Timer
@@ -23,17 +23,17 @@ func NewCounter(d time.Duration) *Counter {
 }
 
 func (c *Counter) Incr() {
-	c.Lock()
+	c.mu.Lock()
 	c.records = append(c.records, time.Now())
-	c.Unlock()
+	c.mu.Unlock()
 	if atomic.CompareAndSwapUint32(&c.cleaning, 0, 1) {
 		go c.startCleanup()
 	}
 }
 
 func (c *Counter) Len() int {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return len(c.records)
 }
 
@@ -41,9 +41,9 @@ func (c *Counter) Len() int {
 // Counter cannot use any more after close
 func (c *Counter) Close() {
 	close(c.shutdown)
-	c.Lock()
+	c.mu.Lock()
 	c.records = nil
-	c.Unlock()
+	c.mu.Unlock()
 }
 
 func (t *Counter) pop() {
