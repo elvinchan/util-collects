@@ -3,6 +3,7 @@ package file
 import (
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -25,15 +26,27 @@ const (
 )
 
 func ModPatch(path string, t ModTarget, p ModPerm) error {
-	return patch(defaultMod{}, path, t, p)
+	return modPatch(defaultMod{}, path, t, p)
 }
 
 func ModClear(path string, t ModTarget, p ModPerm) error {
-	return clear(defaultMod{}, path, t, p)
+	return modClear(defaultMod{}, path, t, p)
 }
 
 func ModSet(path string, t ModTarget, p ModPerm) error {
-	return set(defaultMod{}, path, t, p)
+	return modSet(defaultMod{}, path, t, p)
+}
+
+func ModPatchWalk(path string, t ModTarget, p ModPerm) error {
+	return modWalkPatch(defaultMod{}, path, t, p)
+}
+
+func ModPatchClear(path string, t ModTarget, p ModPerm) error {
+	return modWalkClear(defaultMod{}, path, t, p)
+}
+
+func ModPatchSet(path string, t ModTarget, p ModPerm) error {
+	return modWalkSet(defaultMod{}, path, t, p)
 }
 
 type ModProvider interface {
@@ -48,14 +61,14 @@ func (defaultMod) Stat(name string) (fs.FileMode, error) {
 	if err != nil {
 		return fs.FileMode(0), err
 	}
-	return fi.Mode().Perm(), err
+	return fi.Mode(), err
 }
 
 func (defaultMod) Chmod(name string, mode fs.FileMode) error {
 	return os.Chmod(name, mode)
 }
 
-func patch(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func modPatch(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
@@ -67,7 +80,7 @@ func patch(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	return m.Chmod(path, target)
 }
 
-func clear(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func modClear(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
@@ -79,7 +92,7 @@ func clear(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	return m.Chmod(path, target)
 }
 
-func set(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func modSet(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
@@ -89,4 +102,55 @@ func set(m ModProvider, path string, t ModTarget, p ModPerm) error {
 		return nil
 	}
 	return m.Chmod(path, target)
+}
+
+func modWalkPatch(m ModProvider, path string, t ModTarget, p ModPerm) error {
+	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			p |= ModPermExec
+		}
+		mod := info.Mode()
+		target := mod | (fs.FileMode(t) & fs.FileMode(p))
+		if target == mod { // already satisfy
+			return nil
+		}
+		return m.Chmod(path, target)
+	})
+}
+
+func modWalkClear(m ModProvider, path string, t ModTarget, p ModPerm) error {
+	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			p &^= ModPermExec
+		}
+		mod := info.Mode()
+		target := mod &^ (fs.FileMode(t) & fs.FileMode(p))
+		if target == mod { // already satisfy
+			return nil
+		}
+		return m.Chmod(path, target)
+	})
+}
+
+func modWalkSet(m ModProvider, path string, t ModTarget, p ModPerm) error {
+	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			p |= ModPermExec
+		}
+		mod := info.Mode()
+		target := fs.FileMode(t) & fs.FileMode(p)
+		if target == mod { // already satisfy
+			return nil
+		}
+		return m.Chmod(path, target)
+	})
 }

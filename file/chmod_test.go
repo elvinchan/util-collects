@@ -43,7 +43,7 @@ func TestChmodPatch(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			tm := testMod{FileMode: c.From}
-			err := patch(&tm, "", c.Target, c.Perm)
+			err := modPatch(&tm, "", c.Target, c.Perm)
 			as.NoError(t, err)
 			as.Equal(t, tm.FileMode, c.To)
 		})
@@ -73,7 +73,7 @@ func TestChmodClear(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			tm := testMod{FileMode: c.From}
-			err := clear(&tm, "", c.Target, c.Perm)
+			err := modClear(&tm, "", c.Target, c.Perm)
 			as.NoError(t, err)
 			as.Equal(t, tm.FileMode, c.To)
 		})
@@ -103,7 +103,7 @@ func TestChmodSet(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			tm := testMod{FileMode: c.From}
-			err := set(&tm, "", c.Target, c.Perm)
+			err := modSet(&tm, "", c.Target, c.Perm)
 			as.NoError(t, err)
 			as.Equal(t, tm.FileMode, c.To)
 		})
