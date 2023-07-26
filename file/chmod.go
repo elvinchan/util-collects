@@ -7,13 +7,13 @@ import (
 	"syscall"
 )
 
-type ModTarget uint32
+type ModRole uint32
 
 const (
-	ModTargetUser  = syscall.S_IRWXU // 0b111000000
-	ModTargetGroup = syscall.S_IRWXG // 0b000111000
-	ModTargetOther = syscall.S_IRWXO // 0b000000111
-	ModTargetAll   = ModTargetUser | ModTargetGroup | ModTargetOther
+	ModRoleUser  = syscall.S_IRWXU // 0b111000000
+	ModRoleGroup = syscall.S_IRWXG // 0b000111000
+	ModRoleOther = syscall.S_IRWXO // 0b000000111
+	ModRoleAll   = ModRoleUser | ModRoleGroup | ModRoleOther
 )
 
 type ModPerm uint32
@@ -25,28 +25,53 @@ const (
 	ModPermAll   = ModPermRead | ModPermWrite | ModPermExec
 )
 
-func ModPatch(path string, t ModTarget, p ModPerm) error {
-	return modPatch(defaultMod{}, path, t, p)
+type ModTarget uint32
+
+const (
+	ModTargetFile = 1
+	ModTargetDir  = ModTargetFile << 1
+	ModTargetAll  = ModTargetFile | ModTargetDir
+)
+
+type Mod struct {
+	ModProvider
+	target ModTarget
 }
 
-func ModClear(path string, t ModTarget, p ModPerm) error {
-	return modClear(defaultMod{}, path, t, p)
+func ModPatch(path string, r ModRole, p ModPerm) error {
+	return modPatch(defaultModProvider, path, r, p)
 }
 
-func ModSet(path string, t ModTarget, p ModPerm) error {
-	return modSet(defaultMod{}, path, t, p)
+func ModClear(path string, r ModRole, p ModPerm) error {
+	return modClear(defaultModProvider, path, r, p)
 }
 
-func ModPatchWalk(path string, t ModTarget, p ModPerm) error {
-	return modWalkPatch(defaultMod{}, path, t, p)
+func ModSet(path string, r ModRole, p ModPerm) error {
+	return modSet(defaultModProvider, path, r, p)
 }
 
-func ModPatchClear(path string, t ModTarget, p ModPerm) error {
-	return modWalkClear(defaultMod{}, path, t, p)
+func ModPatchWalk(path string, tr ModRole, p ModPerm, t ModTarget) error {
+	m := &Mod{
+		ModProvider: defaultModProvider,
+		target:      t,
+	}
+	return m.patchWalk(path, tr, p)
 }
 
-func ModPatchSet(path string, t ModTarget, p ModPerm) error {
-	return modWalkSet(defaultMod{}, path, t, p)
+func ModClearWalk(path string, tr ModRole, p ModPerm, t ModTarget) error {
+	m := &Mod{
+		ModProvider: defaultModProvider,
+		target:      t,
+	}
+	return m.clearWalk(path, tr, p)
+}
+
+func ModSetWalk(path string, tr ModRole, p ModPerm, t ModTarget) error {
+	m := &Mod{
+		ModProvider: defaultModProvider,
+		target:      ModTargetAll,
+	}
+	return m.setWalk(path, tr, p)
 }
 
 type ModProvider interface {
@@ -54,9 +79,9 @@ type ModProvider interface {
 	Chmod(name string, mode fs.FileMode) error
 }
 
-type defaultMod struct{}
+type modProvider struct{}
 
-func (defaultMod) Stat(name string) (fs.FileMode, error) {
+func (modProvider) Stat(name string) (fs.FileMode, error) {
 	fi, err := os.Stat(name)
 	if err != nil {
 		return fs.FileMode(0), err
@@ -64,56 +89,60 @@ func (defaultMod) Stat(name string) (fs.FileMode, error) {
 	return fi.Mode(), err
 }
 
-func (defaultMod) Chmod(name string, mode fs.FileMode) error {
+func (modProvider) Chmod(name string, mode fs.FileMode) error {
 	return os.Chmod(name, mode)
 }
 
-func modPatch(m ModProvider, path string, t ModTarget, p ModPerm) error {
+var defaultModProvider = modProvider{}
+
+func modPatch(m ModProvider, path string, r ModRole, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
 	}
-	target := mod | (fs.FileMode(t) & fs.FileMode(p))
+	target := mod | (fs.FileMode(r) & fs.FileMode(p))
 	if target == mod { // already satisfy
 		return nil
 	}
 	return m.Chmod(path, target)
 }
 
-func modClear(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func modClear(m ModProvider, path string, r ModRole, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
 	}
-	target := mod &^ (fs.FileMode(t) & fs.FileMode(p))
+	target := mod &^ (fs.FileMode(r) & fs.FileMode(p))
 	if target == mod { // already satisfy
 		return nil
 	}
 	return m.Chmod(path, target)
 }
 
-func modSet(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func modSet(m ModProvider, path string, r ModRole, p ModPerm) error {
 	mod, err := m.Stat(path)
 	if err != nil {
 		return err
 	}
-	target := fs.FileMode(t) & fs.FileMode(p)
+	target := fs.FileMode(r) & fs.FileMode(p)
 	if target == mod { // already satisfy
 		return nil
 	}
 	return m.Chmod(path, target)
 }
 
-func modWalkPatch(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func (m *Mod) patchWalk(path string, r ModRole, p ModPerm) error {
 	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			p |= ModPermExec
+		if info.Mode().IsRegular() && (m.target&ModTargetFile) == 0 {
+			return nil
+		} else if info.IsDir() && (m.target&ModTargetDir) == 0 {
+			return nil
 		}
 		mod := info.Mode()
-		target := mod | (fs.FileMode(t) & fs.FileMode(p))
+		target := mod | (fs.FileMode(r) & fs.FileMode(p))
 		if target == mod { // already satisfy
 			return nil
 		}
@@ -121,16 +150,18 @@ func modWalkPatch(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	})
 }
 
-func modWalkClear(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func (m *Mod) clearWalk(path string, r ModRole, p ModPerm) error {
 	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			p &^= ModPermExec
+		if info.Mode().IsRegular() && (m.target&ModTargetFile) == 0 {
+			return nil
+		} else if info.IsDir() && (m.target&ModTargetDir) == 0 {
+			return nil
 		}
 		mod := info.Mode()
-		target := mod &^ (fs.FileMode(t) & fs.FileMode(p))
+		target := mod &^ (fs.FileMode(r) & fs.FileMode(p))
 		if target == mod { // already satisfy
 			return nil
 		}
@@ -138,16 +169,18 @@ func modWalkClear(m ModProvider, path string, t ModTarget, p ModPerm) error {
 	})
 }
 
-func modWalkSet(m ModProvider, path string, t ModTarget, p ModPerm) error {
+func (m *Mod) setWalk(path string, r ModRole, p ModPerm) error {
 	return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
-			p |= ModPermExec
+		if info.Mode().IsRegular() && (m.target&ModTargetFile) == 0 {
+			return nil
+		} else if info.IsDir() && (m.target&ModTargetDir) == 0 {
+			return nil
 		}
 		mod := info.Mode()
-		target := fs.FileMode(t) & fs.FileMode(p)
+		target := fs.FileMode(r) & fs.FileMode(p)
 		if target == mod { // already satisfy
 			return nil
 		}
