@@ -80,6 +80,27 @@ func (lc *LinkCounter) Range(f func(key string, hits int64, linkIds []string) bo
 	}
 }
 
+type KeyCount struct {
+	Key   string `json:"key"`
+	Count int64  `json:"count"`
+}
+
+// Get list of key with count.
+func (lc *LinkCounter) CountList() []KeyCount {
+	lc.mu.Lock()
+	defer lc.mu.Unlock()
+	ts := lc.pq.List()
+
+	v := make([]KeyCount, len(ts))
+	for i := range ts {
+		v[i] = KeyCount{
+			Key:   ts[i].Key(),
+			Count: ts[i].Priority(),
+		}
+	}
+	return v
+}
+
 // Get check key exist and retrieves hits and linkIds of the key.
 func (lc *LinkCounter) Get(key string) (bool, int64, []string) {
 	lc.mu.Lock()

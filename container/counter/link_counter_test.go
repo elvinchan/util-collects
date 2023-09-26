@@ -38,6 +38,13 @@ func TestLinkCounter(t *testing.T) {
 		}
 	}
 
+	kcs := lc.CountList()
+	as.Equal(t, len(kcs), 8)
+	for i, kc := range kcs {
+		as.Equal(t, kc.Key, cases[len(cases)-1-i].key)
+		as.Equal(t, kc.Count, cases[len(cases)-1-i].hits, fmt.Sprintf("hits not match for index: %d", i))
+	}
+
 	type Result struct {
 		key     string
 		hits    int64

@@ -17,6 +17,10 @@ type Item struct {
 	index int // The index of the item in the heap.
 }
 
+func (t *Item) Key() string {
+	return t.key
+}
+
 func (t *Item) Value() interface{} {
 	return t.value
 }
