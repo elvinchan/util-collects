@@ -18,3 +18,11 @@ func TestCounter(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 	as.Equal(t, c.Len(), 0)
 }
+
+func TestCounterReset(t *testing.T) {
+	c := NewCounter(time.Millisecond * 50)
+	c.Incr()
+	as.Equal(t, c.Len(), 1)
+	c.Reset()
+	as.Equal(t, c.Len(), 0)
+}

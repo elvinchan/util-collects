@@ -39,6 +39,14 @@ func (c *Counter) Len() int {
 	return c.ttlList.Len()
 }
 
+func (c *Counter) Reset() {
+	c.mu.Lock()
+	if c.ttlList.Len() > 0 {
+		c.ttlList = list.New()
+	}
+	c.mu.Unlock()
+}
+
 // Close remove all data from Counter and exit cleanup.
 // Counter cannot be used any more after close
 func (c *Counter) Close() {
