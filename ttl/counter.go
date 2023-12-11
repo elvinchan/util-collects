@@ -1,6 +1,7 @@
 package ttl
 
 import (
+	"container/list"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,7 +10,7 @@ import (
 type Counter struct {
 	mu       sync.RWMutex
 	ttl      time.Duration
-	records  []time.Time
+	ttlList  *list.List
 	timer    *time.Timer
 	cleaning uint32 // 0 -> false, 1 -> true
 	shutdown chan struct{}
@@ -18,13 +19,14 @@ type Counter struct {
 // NewCounter create a counter with TTL records
 func NewCounter(d time.Duration) *Counter {
 	return &Counter{
-		ttl: d,
+		ttl:     d,
+		ttlList: list.New(),
 	}
 }
 
 func (c *Counter) Incr() {
 	c.mu.Lock()
-	c.records = append(c.records, time.Now())
+	c.ttlList.PushFront(time.Now().Add(c.ttl))
 	c.mu.Unlock()
 	if atomic.CompareAndSwapUint32(&c.cleaning, 0, 1) {
 		go c.startCleanup()
@@ -34,29 +36,35 @@ func (c *Counter) Incr() {
 func (c *Counter) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return len(c.records)
+	return c.ttlList.Len()
 }
 
 // Close remove all data from Counter and exit cleanup.
-// Counter cannot use any more after close
+// Counter cannot be used any more after close
 func (c *Counter) Close() {
 	close(c.shutdown)
 	c.mu.Lock()
-	c.records = nil
+	c.ttlList = nil
 	c.mu.Unlock()
 }
 
 func (t *Counter) pop() {
-	if t.Len() > 0 {
-		t.records = t.records[1:]
+	t.mu.Lock()
+	e := t.ttlList.Back()
+	if e != nil {
+		t.ttlList.Remove(e)
 	}
+	t.mu.Unlock()
 }
 
 func (t *Counter) get() time.Time {
 	var result time.Time
-	if t.Len() > 0 {
-		result = t.records[0]
+	t.mu.Lock()
+	e := t.ttlList.Back()
+	if e != nil {
+		result = e.Value.(time.Time)
 	}
+	t.mu.Unlock()
 	return result
 }
 
@@ -66,12 +74,12 @@ func (c *Counter) cleanup() bool {
 		if earlyest.IsZero() {
 			return true
 		}
-		d := time.Until(earlyest.Add(c.ttl))
+		d := time.Until(earlyest)
 		if d <= 0 {
 			c.pop()
 			continue
 		}
-		c.timer.Reset(c.ttl)
+		c.timer.Reset(d)
 		return false
 	}
 }
