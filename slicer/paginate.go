@@ -1,26 +1,28 @@
-//go:build !go1.18
-// +build !go1.18
-
 package slicer
 
-import "reflect"
+// Paginate returns a page of items. If currentPage <= 0, reguard it as 1, if
+// currentPage > last page, returns empty set. If maxResults <= -1, reguard it
+// as no max results limit.
+func Paginate[S ~[]E, E any](items S, currentPage, maxResults int) S {
+	offset := (currentPage - 1) * maxResults
+	return Subset(items, maxResults, offset)
+}
 
-func Paginate(items interface{}, currentPage, maxResults int) interface{} {
-	data := reflect.ValueOf(items)
-	if data.Kind() != reflect.Slice {
-		// no-op
+// Subset returns a subset of items like SQL LIMIT/OFFSET. If offset < 0,
+// reguard it as 0, if offset > last index, returns empty set. If limit <= -1,
+// reguard it as no limit.
+func Subset[S ~[]E, E any](items S, limit, offset int) S {
+	if limit <= -1 {
 		return items
 	}
-
-	start := (currentPage - 1) * maxResults
-	if start > data.Len() {
-		start = data.Len()
+	if offset > len(items) {
+		offset = len(items)
+	} else if offset < 0 {
+		offset = 0
 	}
-	end := start + maxResults
-	if end > data.Len() {
-		end = data.Len()
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
 	}
-	res := reflect.MakeSlice(data.Type(), end-start, end-start)
-	reflect.Copy(res, data.Slice(start, end))
-	return res.Interface()
+	return items[offset:end]
 }
