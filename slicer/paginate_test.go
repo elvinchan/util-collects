@@ -47,6 +47,11 @@ func TestPaginate(t *testing.T) {
 		as.Equal(t, v, []int{1})
 	})
 
+	t.Run("InvalidPageNoMaxResultsLimit", func(t *testing.T) {
+		v := Paginate([]int{1, 2, 3}, -1, -1)
+		as.Equal(t, v, []int{1, 2, 3})
+	})
+
 	t.Run("InvalidMaxResults", func(t *testing.T) {
 		v := Paginate([]int{1, 2, 3}, -1, 1)
 		as.Equal(t, v, []int{1})
@@ -90,13 +95,18 @@ func TestSubset(t *testing.T) {
 	})
 
 	t.Run("NoLimit", func(t *testing.T) {
-		v := Subset([]int{1, 2, 3}, -1, 0)
-		as.Equal(t, v, []int{1, 2, 3})
+		v := Subset([]int{1, 2, 3}, -1, 1)
+		as.Equal(t, v, []int{2, 3})
 	})
 
 	t.Run("InvalidOffset", func(t *testing.T) {
 		v := Subset([]int{1, 2, 3}, 1, -1)
 		as.Equal(t, v, []int{1})
+	})
+
+	t.Run("InvalidOffsetNoLimit", func(t *testing.T) {
+		v := Subset([]int{1, 2, 3}, -1, -1)
+		as.Equal(t, v, []int{1, 2, 3})
 	})
 
 	t.Run("InvalidLimit", func(t *testing.T) {

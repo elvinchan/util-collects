@@ -4,6 +4,9 @@ package slicer
 // currentPage > last page, returns empty set. If maxResults <= -1, reguard it
 // as no max results limit.
 func Paginate[S ~[]E, E any](items S, currentPage, maxResults int) S {
+	if maxResults <= -1 {
+		maxResults = len(items)
+	}
 	offset := (currentPage - 1) * maxResults
 	return Subset(items, maxResults, offset)
 }
@@ -13,7 +16,7 @@ func Paginate[S ~[]E, E any](items S, currentPage, maxResults int) S {
 // reguard it as no limit.
 func Subset[S ~[]E, E any](items S, limit, offset int) S {
 	if limit <= -1 {
-		return items
+		limit = len(items)
 	}
 	if offset > len(items) {
 		offset = len(items)
