@@ -1,17 +1,36 @@
 package log
 
-type (
-	Logger interface {
-		NewEntry() Entry
-		Entry
+import "context"
 
-		Level() Level
-		SetLevel(lvl Level)
-	}
+type Entry interface {
+	WithContext(ctx context.Context) Entry
+	WithField(key string, value interface{}) Entry
+	WithFields(keysAndValues ...interface{}) Entry
+	WithError(err error) Entry
 
-	// Level type
-	Level uint32
-)
+	Fatal(format string, v ...interface{})
+	Panic(format string, v ...interface{})
+	Error(format string, v ...interface{})
+	Warn(format string, v ...interface{})
+	Info(format string, v ...interface{})
+	Debug(format string, v ...interface{})
+}
+
+type Logger interface {
+	NewEntry() Entry
+	Entry
+
+	Level() Level
+	SetLevel(lvl Level)
+}
+
+type Sink interface {
+	WithField(key string, value interface{}) Sink
+	Output(ctx context.Context, prefix string, lvl Level, msg string)
+}
+
+// Level type
+type Level uint32
 
 const (
 	// FatalLevel level. Logs and then calls `os.Exit(1)`.

@@ -3,21 +3,22 @@ package log
 import "context"
 
 func NewDiscardLogger() Logger {
-	return discardReceiver{}
+	return discardLogger{}
 }
 
-type discardReceiver struct{}
+type discardLogger struct{}
 
-func (d discardReceiver) NewEntry() Entry                               { return d }
-func (d discardReceiver) WithContext(ctx context.Context) Entry         { return d }
-func (d discardReceiver) WithField(key string, value interface{}) Entry { return d }
-func (d discardReceiver) WithFields(fields Fields) Entry                { return d }
-func (d discardReceiver) WithError(err error) Entry                     { return d }
-func (discardReceiver) Fatal(format string, v ...interface{})           {}
-func (discardReceiver) Panic(format string, v ...interface{})           {}
-func (discardReceiver) Error(format string, v ...interface{})           {}
-func (discardReceiver) Warn(format string, v ...interface{})            {}
-func (discardReceiver) Info(format string, v ...interface{})            {}
-func (discardReceiver) Debug(format string, v ...interface{})           {}
-func (discardReceiver) Level() Level                                    { return 0 }
-func (discardReceiver) SetLevel(lvl Level)                              {}
+func (d discardLogger) NewEntry() Entry                               { return d }
+func (d discardLogger) AddPrefix(p string) Entry                      { return d }
+func (d discardLogger) WithContext(ctx context.Context) Entry         { return d }
+func (d discardLogger) WithField(key string, value interface{}) Entry { return d }
+func (d discardLogger) WithFields(keysAndValues ...interface{}) Entry { return d }
+func (d discardLogger) WithError(err error) Entry                     { return d }
+func (discardLogger) Fatal(format string, v ...interface{})           {}
+func (discardLogger) Panic(format string, v ...interface{})           {}
+func (discardLogger) Error(format string, v ...interface{})           {}
+func (discardLogger) Warn(format string, v ...interface{})            {}
+func (discardLogger) Info(format string, v ...interface{})            {}
+func (discardLogger) Debug(format string, v ...interface{})           {}
+func (discardLogger) Level() Level                                    { return 0 }
+func (discardLogger) SetLevel(lvl Level)                              {}

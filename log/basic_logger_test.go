@@ -6,15 +6,28 @@ import (
 	"testing"
 )
 
-type testReceiver struct {
-	outputer func(entry *BasicEntry, lvl Level, msg string)
+type testSink struct {
+	fields   map[string]interface{}
+	outputer func(sink *testSink, prefix string, lvl Level, msg string)
 }
 
-func (r *testReceiver) Output(entry *BasicEntry, lvl Level, msg string) {
-	r.outputer(entry, lvl, msg)
+func (s *testSink) WithField(key string, value interface{}) Sink {
+	newMap := make(map[string]interface{}, len(s.fields)+1)
+	for k, v := range s.fields {
+		newMap[k] = v
+	}
+	newMap[key] = value
+
+	clone := *s
+	clone.fields = newMap
+	return &clone
 }
 
-func TestCustomizedReceiver(t *testing.T) {
+func (s *testSink) Output(ctx context.Context, prefix string, lvl Level, msg string) {
+	s.outputer(s, prefix, lvl, msg)
+}
+
+func TestCustomizedSink(t *testing.T) {
 	cases := []struct {
 		Prefix string
 		Level  Level
@@ -42,12 +55,12 @@ func TestCustomizedReceiver(t *testing.T) {
 		t.Run(fmt.Sprintf("Case-%d", i), func(t *testing.T) {
 			resultCh := make(chan string, 1)
 			fieldsCh := make(chan map[string]interface{}, 1)
-			l := NewBasicLogger(c.Prefix, &testReceiver{
-				outputer: func(entry *BasicEntry, lvl Level, msg string) {
-					resultCh <- fmt.Sprintf("%s %s - %s", lvl, entry.Logger.Prefix, msg)
-					fieldsCh <- entry.Fields
-				},
-			})
+			sink := &testSink{}
+			sink.outputer = func(sink *testSink, prefix string, lvl Level, msg string) {
+				fieldsCh <- sink.fields
+				resultCh <- fmt.Sprintf("%s %s - %s", lvl, prefix, msg)
+			}
+			l := NewBasicLogger(sink, BasicLoggerWithPrefix(c.Prefix))
 			l.SetLevel(DebugLevel)
 			e := l.NewEntry()
 			for k, v := range c.Fields {
@@ -73,9 +86,6 @@ func TestCustomizedReceiver(t *testing.T) {
 			}
 
 			e = l.NewEntry()
-			for k, v := range c.Fields {
-				e.WithField(k, v)
-			}
 
 			switch c.Level {
 			case DebugLevel:
