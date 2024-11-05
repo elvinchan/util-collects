@@ -23,6 +23,26 @@ func TestSetGet(t *testing.T) {
 		as.Equal(t, v.(string), "hello")
 	})
 
+	t.Run("SetNX", func(t *testing.T) {
+		c := NewCache()
+		as.NotEqual(t, c.items, nil)
+		as.NotEqual(t, c.shutdown, nil)
+
+		ok := c.SetNX(1, "hello")
+		as.True(t, ok)
+		as.Equal(t, c.Len(), 1)
+		v, ok := c.Get(1)
+		as.True(t, ok)
+		as.Equal(t, v.(string), "hello")
+
+		ok = c.SetNX(1, "world")
+		as.False(t, ok)
+		as.Equal(t, c.Len(), 1)
+		v, ok = c.Get(1)
+		as.True(t, ok)
+		as.Equal(t, v.(string), "hello")
+	})
+
 	t.Run("TTL", func(t *testing.T) {
 		c := NewCache(CacheWithTTL(time.Millisecond, TTLRefreshModeNone))
 		as.Equal(t, c.ttl, TestDefaultMinGap)
@@ -37,7 +57,7 @@ func TestSetGet(t *testing.T) {
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
-		}, TestDefaultMinGap+Testjitter, TestDefaultMinGap)
+		}, TestDefaultMinGap*2, TestDefaultMinGap)
 		_, ok = c.Get(1)
 		as.False(t, ok)
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(0))
@@ -98,7 +118,7 @@ func TestSetGet(t *testing.T) {
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
-		}, TestDefaultMinGap+Testjitter, TestDefaultMinGap)
+		}, TestDefaultMinGap*2, TestDefaultMinGap)
 		_, ok = c.Get(1)
 		as.False(t, ok)
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(0))
@@ -136,26 +156,26 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(TestDefaultMinGap)
+		time.Sleep(TestDefaultMinGap - TestJitter)
 		v, ok := c.Get(1)
 		as.True(t, ok)
 		as.Equal(t, v.(string), "hello")
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		nextExpireAt := c.items[1].expireAt
 		as.True(t, nextExpireAt.After(expireAt))
 		as.True(t, nextExpireAt.After(time.Now()))
 		as.True(t, nextExpireAt.Before(time.Now().Add(gap)))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		as.Never(t, func(ctx context.Context) bool {
 			return c.Len() == 0
 		}, gap, TestDefaultMinGap/2)
 
-		// shift == +300ms
+		// shift ~= +300ms
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
@@ -181,24 +201,24 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(TestDefaultMinGap)
+		time.Sleep(TestDefaultMinGap - TestJitter)
 		c.Set(1, "world")
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		nextExpireAt := c.items[1].expireAt
 		as.True(t, nextExpireAt.After(expireAt))
 		as.True(t, nextExpireAt.After(time.Now()))
 		as.True(t, nextExpireAt.Before(time.Now().Add(gap)))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		as.Never(t, func(ctx context.Context) bool {
 			return c.Len() == 0
 		}, gap, TestDefaultMinGap/2)
 
-		// shift == +300ms
+		// shift ~= +300ms
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
@@ -224,26 +244,26 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(TestDefaultMinGap)
+		time.Sleep(TestDefaultMinGap - TestJitter)
 		v, ok := c.Get(1)
 		as.True(t, ok)
 		as.Equal(t, v.(string), "hello")
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		nextExpireAt := c.items[1].expireAt
 		as.True(t, nextExpireAt.After(expireAt))
 		as.True(t, nextExpireAt.After(time.Now()))
 		as.True(t, nextExpireAt.Before(time.Now().Add(gap)))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		as.Never(t, func(ctx context.Context) bool {
 			return c.Len() == 0
 		}, gap, TestDefaultMinGap/2)
 
-		// shift == +300ms
+		// shift ~= +300ms
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
@@ -266,24 +286,24 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(TestDefaultMinGap)
+		time.Sleep(TestDefaultMinGap - TestJitter)
 		c.Set(1, "world")
 		as.Equal(t, atomic.LoadUint32(&c.cleaning), uint32(1))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		nextExpireAt = c.items[1].expireAt
 		as.True(t, nextExpireAt.After(expireAt))
 		as.True(t, nextExpireAt.After(time.Now()))
 		as.True(t, nextExpireAt.Before(time.Now().Add(gap)))
 
-		// shift == +100ms
+		// shift ~= +100ms
 
 		as.Never(t, func(ctx context.Context) bool {
 			return c.Len() == 0
 		}, gap, TestDefaultMinGap/2)
 
-		// shift == +300ms
+		// shift ~= +300ms
 
 		as.Eventually(t, func(ctx context.Context) bool {
 			return c.Len() == 0
@@ -309,7 +329,7 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(gap - Testjitter)
+		time.Sleep(gap - TestJitter)
 		v, ok := c.Get(1)
 		as.True(t, ok)
 		as.Equal(t, v.(string), "hello")
@@ -342,7 +362,7 @@ func TestTTL(t *testing.T) {
 
 		// shift == 0
 
-		time.Sleep(gap - Testjitter)
+		time.Sleep(gap - TestJitter)
 		c.Set(1, "world")
 
 		// shift ~= +200ms

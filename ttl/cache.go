@@ -93,6 +93,22 @@ func (c *Cache) Set(key, value interface{}) {
 		return
 	}
 
+	c.addNewItem(key, value)
+}
+
+// SetNX set value if the key is not exist
+func (c *Cache) SetNX(key, value interface{}) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.items[key]; ok {
+		return false
+	}
+
+	c.addNewItem(key, value)
+	return true
+}
+
+func (c *Cache) addNewItem(key, value interface{}) {
 	item := Item{
 		value: value,
 	}
