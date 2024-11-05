@@ -11,15 +11,16 @@ var defaultMinGap = time.Second
 
 // Cache is a synchronised map of items that auto-expire once stale
 type Cache struct {
-	mu       sync.RWMutex
-	cap      int
-	ttl      time.Duration
-	items    map[interface{}]Item
-	lruList  *list.List // realize LinkedHashMap with items
-	ttlList  *list.List // realize LinkedHashMap with items
-	timer    *time.Timer
-	cleaning uint32 // 0 -> false, 1 -> true
-	shutdown chan struct{}
+	mu             sync.RWMutex
+	cap            int
+	ttl            time.Duration
+	ttlRefreshMode TTLRefreshMode
+	items          map[interface{}]*Item
+	lruList        *list.List // realize LinkedHashMap with items
+	ttlList        *list.List // realize LinkedHashMap with items
+	timer          *time.Timer
+	cleaning       uint32 // 0 -> false, 1 -> true
+	shutdown       chan struct{}
 }
 
 type Item struct {
@@ -44,12 +45,21 @@ func CacheWithLRU(cap int) CacheOption {
 	}
 }
 
-func CacheWithTTL(d time.Duration) CacheOption {
+type TTLRefreshMode uint8
+
+const (
+	TTLRefreshModeGet TTLRefreshMode = 1 << iota
+	TTLRefreshModeSet
+	TTLRefreshModeNone TTLRefreshMode = 0
+)
+
+func CacheWithTTL(d time.Duration, refreshMode TTLRefreshMode) CacheOption {
 	return func(c *Cache) {
 		if d < defaultMinGap {
 			d = defaultMinGap
 		}
 		c.ttl = d
+		c.ttlRefreshMode = refreshMode
 		c.ttlList = list.New()
 	}
 }
@@ -57,7 +67,7 @@ func CacheWithTTL(d time.Duration) CacheOption {
 // NewCache create a K-V cache
 func NewCache(opts ...CacheOption) *Cache {
 	c := &Cache{
-		items:    make(map[interface{}]Item),
+		items:    make(map[interface{}]*Item),
 		shutdown: make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -70,10 +80,14 @@ func NewCache(opts ...CacheOption) *Cache {
 func (c *Cache) Set(key, value interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// already exist
 	if item, ok := c.items[key]; ok {
+		// already exist
 		if c.lruList != nil {
 			c.lruList.MoveToFront(item.lru)
+		}
+		if c.ttlList != nil && c.ttlRefreshMode&TTLRefreshModeSet > 0 {
+			item.expireAt = time.Now().Add(c.ttl)
+			c.ttlList.MoveToFront(item.ttl)
 		}
 		item.value = value
 		return
@@ -85,6 +99,9 @@ func (c *Cache) Set(key, value interface{}) {
 	ent := entry{
 		key,
 	}
+	if c.lruList != nil {
+		item.lru = c.lruList.PushFront(&ent)
+	}
 	if c.ttlList != nil {
 		item.expireAt = time.Now().Add(c.ttl)
 		item.ttl = c.ttlList.PushFront(&ent)
@@ -92,11 +109,8 @@ func (c *Cache) Set(key, value interface{}) {
 			go c.startCleanup()
 		}
 	}
-	if c.lruList != nil {
-		item.lru = c.lruList.PushFront(&ent)
-	}
 	// add new
-	c.items[key] = item
+	c.items[key] = &item
 
 	// remove least used if over maximum capacity
 	if c.cap > 0 && len(c.items) > c.cap {
@@ -118,8 +132,12 @@ func (c *Cache) Get(key interface{}) (interface{}, bool) {
 	}
 
 	if item.expireAt.IsZero() || item.expireAt.After(time.Now()) {
-		if c.cap > 0 {
+		if c.lruList != nil {
 			c.lruList.MoveToFront(item.lru)
+		}
+		if c.ttlList != nil && c.ttlRefreshMode&TTLRefreshModeGet > 0 {
+			item.expireAt = time.Now().Add(c.ttl)
+			c.ttlList.MoveToFront(item.ttl)
 		}
 		return item.value, true
 	}
