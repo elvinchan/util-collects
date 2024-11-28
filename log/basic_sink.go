@@ -32,6 +32,14 @@ func (s *basicSink) Output(ctx context.Context, prefix string, lvl Level, msg st
 	sb.WriteString(lvl.String())
 	sb.WriteString(basicSeparator)
 	sb.WriteString(prefix)
+
+	errInterface, ok := s.fields[ErrorKey]
+	if ok {
+		err, ok := errInterface.(error)
+		if ok {
+			s.fields[ErrorKey] = err.Error()
+		}
+	}
 	if len(s.fields) > 0 {
 		fs, err := json.Marshal(s.fields)
 		if err == nil {
