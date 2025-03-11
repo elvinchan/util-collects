@@ -32,14 +32,14 @@ type HashMeta struct {
 type HashOption func(*hashOptions)
 
 type hashOptions struct {
-	bufSize uint64
+	bufSize int
 	meta    []HashMeta
 }
 
 const minBufferSize = 1 * 1024          // 1KB
 const maxBufferSize = 128 * 1024 * 1024 // 128MB
 
-func WithBufferSize(n uint64) HashOption {
+func WithBufferSize(n int) HashOption {
 	return func(o *hashOptions) {
 		if n < minBufferSize {
 			n = minBufferSize
@@ -51,21 +51,29 @@ func WithBufferSize(n uint64) HashOption {
 	}
 }
 
-func WithHashMeta(m HashMeta) HashOption {
+// WithHashMeta adds hash meta to hasher.
+// If hash type is already present, it will be replaced.
+func WithHashMeta(m ...HashMeta) HashOption {
 	return func(o *hashOptions) {
-		for i, existing := range o.meta {
-			if existing.Type == m.Type {
-				o.meta[i] = m
-				return
+		for _, t := range m {
+			exist := false
+			for i, existing := range o.meta {
+				if existing.Type == t.Type {
+					exist = true
+					o.meta[i] = t
+					break
+				}
+			}
+			if !exist {
+				o.meta = append(o.meta, t)
 			}
 		}
-		o.meta = append(o.meta, m)
 	}
 }
 
 type Hasher struct {
 	bufPool sync.Pool
-	bufSize uint64
+	bufSize int
 	meta    []HashMeta
 }
 
@@ -92,6 +100,14 @@ func NewHasher(opts ...HashOption) *Hasher {
 		bufSize: o.bufSize,
 		meta:    o.meta,
 	}
+}
+
+func (h *Hasher) IsValid(ht HashType) bool {
+	supported := HashType(0)
+	for _, meta := range h.meta {
+		supported |= meta.Type
+	}
+	return ht != 0 && (ht&supported == ht)
 }
 
 // ReaderHash returns a map of hash types to their hex encoded hash values.
@@ -127,13 +143,15 @@ func readerHash(ctx context.Context, r io.Reader, ht HashType, h *Hasher) (
 	}
 
 	hashers := make(map[HashType]hash.Hash)
+	supported := HashType(0)
 	for _, meta := range h.meta {
+		supported |= meta.Type
 		if ht&meta.Type != 0 {
 			hashers[meta.Type] = meta.HashFunc()
 		}
 	}
-	if len(hashers) == 0 {
-		return nil, 0, errors.New("unsupported hash type")
+	if ht&supported != ht {
+		return nil, 0, errors.New("contains unsupported hash type")
 	}
 	writers := make([]io.Writer, 0, len(hashers))
 	for t := range hashers {

@@ -14,7 +14,52 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elvinchan/util-collects/as"
 )
+
+func TestHasher(t *testing.T) {
+	testCases := []struct {
+		name        string
+		meta        []HashMeta
+		input       HashType
+		expectValid bool
+	}{
+		{
+			name:        "single type",
+			meta:        []HashMeta{{HashMD5, md5.New}},
+			input:       HashMD5,
+			expectValid: true,
+		},
+		{
+			name:        "valid and invalid mix types",
+			meta:        []HashMeta{{HashMD5, md5.New}},
+			input:       HashMD5 | 0x1000,
+			expectValid: false,
+		},
+		{
+			name:        "no registered type",
+			meta:        []HashMeta{},
+			input:       0x1000,
+			expectValid: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			hasher := NewHasher(WithHashMeta(tc.meta...))
+
+			as.Equal(t, tc.expectValid, hasher.IsValid(tc.input))
+
+			_, _, err := hasher.ReaderHash(context.Background(), strings.NewReader("test"), tc.input)
+			if tc.expectValid {
+				as.NoError(t, err)
+			} else {
+				as.Error(t, err)
+			}
+		})
+	}
+}
 
 func TestReaderHash(t *testing.T) {
 	testContent := []byte("test data for hashing")
