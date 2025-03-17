@@ -38,13 +38,20 @@ type hashOptions struct {
 
 const minBufferSize = 1 * 1024          // 1KB
 const maxBufferSize = 128 * 1024 * 1024 // 128MB
+const defaultBufferSize = 32 * 1024     // 32KB
 
+// WithBufferSize sets the buffer size for hasher.
+// The default buffer size is 32KB.
+// If the buffer size is less than equal 0, it will disable buffer.
+// If the buffer size is less than 1KB, it will be set to 1KB.
+// If the buffer size is greater than 128MB, it will be set to 128MB.
 func WithBufferSize(n int) HashOption {
 	return func(o *hashOptions) {
-		if n < minBufferSize {
+		if n <= 0 {
+			n = 0
+		} else if n < minBufferSize {
 			n = minBufferSize
-		}
-		if n > maxBufferSize {
+		} else if n > maxBufferSize {
 			n = maxBufferSize
 		}
 		o.bufSize = n
@@ -79,7 +86,7 @@ type Hasher struct {
 
 func NewHasher(opts ...HashOption) *Hasher {
 	o := hashOptions{
-		bufSize: 32 * 1024,
+		bufSize: defaultBufferSize,
 		meta: []HashMeta{
 			{HashMD5, md5.New},
 			{HashSHA1, sha1.New},
@@ -90,16 +97,19 @@ func NewHasher(opts ...HashOption) *Hasher {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Hasher{
-		bufPool: sync.Pool{
+	h := &Hasher{
+		bufSize: o.bufSize,
+		meta:    o.meta,
+	}
+	if h.bufSize > 0 {
+		h.bufPool = sync.Pool{
 			New: func() interface{} {
 				buf := make([]byte, o.bufSize)
 				return &buf
 			},
-		},
-		bufSize: o.bufSize,
-		meta:    o.meta,
+		}
 	}
+	return h
 }
 
 func (h *Hasher) IsValid(ht HashType) bool {
@@ -164,11 +174,17 @@ func readerHash(ctx context.Context, r io.Reader, ht HashType, h *Hasher) (
 		ctx: ctx,
 	}
 
-	bufPtr := h.bufPool.Get().(*[]byte)
-	buf := *bufPtr
-	defer h.bufPool.Put(bufPtr)
+	var n int64
+	var err error
+	if h.bufSize > 0 {
+		bufPtr := h.bufPool.Get().(*[]byte)
+		buf := *bufPtr
+		defer h.bufPool.Put(bufPtr)
 
-	n, err := io.CopyBuffer(multiWriter, cr, buf[:h.bufSize])
+		n, err = io.CopyBuffer(multiWriter, cr, buf)
+	} else {
+		n, err = io.Copy(multiWriter, cr)
+	}
 	if err != nil {
 		return nil, n, err
 	}

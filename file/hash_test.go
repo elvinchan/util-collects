@@ -311,3 +311,64 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 	r.pos += n
 	return n, nil
 }
+
+func TestBufferSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected int
+		poolInit bool
+	}{
+		{"Negative Value", -1, 0, false},
+		{"Zero Value", 0, 0, false},
+		{"Under Min", 500, minBufferSize, true},
+		{"Normal Value", 32 * 1024, 32 * 1024, true},
+		{"Over Max", 256 * 1024 * 1024, maxBufferSize, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewHasher(WithBufferSize(tt.input))
+
+			if tt.poolInit != (h.bufPool.New != nil) {
+				t.Errorf("pool init mismatch, expect %v got %v",
+					tt.poolInit, h.bufPool.New != nil)
+			}
+
+			if h.bufSize != tt.expected {
+				t.Errorf("buffer size mismatch, expect %d got %d",
+					tt.expected, h.bufSize)
+			}
+		})
+	}
+}
+
+func TestHashingWithoutBuffer(t *testing.T) {
+	h := NewHasher(WithBufferSize(-1))
+
+	data := strings.Repeat("test_data", 1000)
+	r := strings.NewReader(data)
+
+	results, n, err := h.ReaderHash(context.Background(), r, HashMD5)
+
+	as.NoError(t, err)
+	as.Equal(t, int64(len(data)), n)
+
+	expected := md5.Sum([]byte(data))
+	as.Equal(t, hex.EncodeToString(expected[:]), results[HashMD5])
+}
+
+func TestBufferReuse(t *testing.T) {
+	h := NewHasher()
+	data := make([]byte, 64*1024)
+	r := bytes.NewReader(data)
+
+	allocs := testing.AllocsPerRun(100, func() {
+		r.Seek(0, io.SeekStart)
+		_, _, _ = h.ReaderHash(context.Background(), r, HashMD5)
+	})
+
+	if allocs > 10 {
+		t.Errorf("expected <=10 allocs, got %f", allocs)
+	}
+}
