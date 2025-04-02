@@ -8,6 +8,6 @@ import (
 
 func TestIIf(t *testing.T) {
 	a, b := 2, 3
-	max := IIf(a > b, a, b).(int)
+	max := IIf(a > b, a, b)
 	as.Equal(t, max, 3)
 }
