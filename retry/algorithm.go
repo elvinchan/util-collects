@@ -49,9 +49,12 @@ func Fibonacci(factor time.Duration) Algorithm {
 }
 
 func fibonacciNumber(n uint) uint {
-	if n == 0 || n == 1 {
+	if n <= 1 {
 		return n
-	} else {
-		return fibonacciNumber(n-1) + fibonacciNumber(n-2)
 	}
+	a, b := uint(0), uint(1)
+	for i := uint(2); i <= n; i++ {
+		a, b = b, a+b
+	}
+	return b
 }

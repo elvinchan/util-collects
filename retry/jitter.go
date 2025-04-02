@@ -3,6 +3,7 @@ package retry
 import (
 	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 )
 
@@ -72,6 +73,8 @@ func NormalDistribution(generator *rand.Rand, standardDeviation float64) Transfo
 	}
 }
 
+var seedCounter int64
+
 // fallbackNewRandom returns the passed in random instance if it's not nil,
 // and otherwise returns a new random instance seeded with the current time.
 func fallbackNewRandom(random *rand.Rand) *rand.Rand {
@@ -80,6 +83,6 @@ func fallbackNewRandom(random *rand.Rand) *rand.Rand {
 		return random
 	}
 
-	seed := time.Now().UnixNano()
-	return rand.New(rand.NewSource(seed))
+	newSeed := atomic.AddInt64(&seedCounter, 1)
+	return rand.New(rand.NewSource(time.Now().UnixNano() + newSeed))
 }
