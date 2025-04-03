@@ -1,4 +1,4 @@
-package retry
+package backoff
 
 import (
 	"math"
@@ -7,18 +7,18 @@ import (
 	"time"
 )
 
-// Transformation defines a function that calculates a time.Duration based on
+// JitterFunc defines a function that calculates a time.Duration based on
 // the given duration.
-type Transformation func(duration time.Duration) time.Duration
+type JitterFunc func(duration time.Duration) time.Duration
 
-// Full creates a Transformation that transforms a duration into a result
+// Full creates a JitterFunc that transforms a duration into a result
 // duration in [0, n) randomly, where n is the given duration.
 //
-// The given generator is what is used to determine the random transformation.
+// The given generator is what is used to determine the random jitterFunc.
 // If a nil generator is passed, a default one will be provided.
 //
 // Inspired by https://www.awsarchitectureblog.com/2015/03/backoff.html
-func Full(generator *rand.Rand) Transformation {
+func Full(generator *rand.Rand) JitterFunc {
 	random := fallbackNewRandom(generator)
 
 	return func(duration time.Duration) time.Duration {
@@ -26,14 +26,14 @@ func Full(generator *rand.Rand) Transformation {
 	}
 }
 
-// Equal creates a Transformation that transforms a duration into a result
+// Equal creates a JitterFunc that transforms a duration into a result
 // duration in [n/2, n) randomly, where n is the given duration.
 //
-// The given generator is what is used to determine the random transformation.
+// The given generator is what is used to determine the random jitterFunc.
 // If a nil generator is passed, a default one will be provided.
 //
 // Inspired by https://www.awsarchitectureblog.com/2015/03/backoff.html
-func Equal(generator *rand.Rand) Transformation {
+func Equal(generator *rand.Rand) JitterFunc {
 	random := fallbackNewRandom(generator)
 
 	return func(duration time.Duration) time.Duration {
@@ -41,14 +41,14 @@ func Equal(generator *rand.Rand) Transformation {
 	}
 }
 
-// Deviation creates a Transformation that transforms a duration into a result
+// Deviation creates a JitterFunc that transforms a duration into a result
 // duration that deviates from the input randomly by a given factor.
 //
-// The given generator is what is used to determine the random transformation.
+// The given generator is what is used to determine the random jitterFunc.
 // If a nil generator is passed, a default one will be provided.
 //
 // Inspired by https://developers.google.com/api-client-library/java/google-http-java-client/backoff
-func Deviation(generator *rand.Rand, factor float64) Transformation {
+func Deviation(generator *rand.Rand, factor float64) JitterFunc {
 	random := fallbackNewRandom(generator)
 
 	return func(duration time.Duration) time.Duration {
@@ -59,13 +59,13 @@ func Deviation(generator *rand.Rand, factor float64) Transformation {
 	}
 }
 
-// NormalDistribution creates a Transformation that transforms a duration into a
+// NormalDistribution creates a JitterFunc that transforms a duration into a
 // result duration based on a normal distribution of the input and the given
 // standard deviation.
 //
-// The given generator is what is used to determine the random transformation.
+// The given generator is what is used to determine the random jitterFunc.
 // If a nil generator is passed, a default one will be provided.
-func NormalDistribution(generator *rand.Rand, standardDeviation float64) Transformation {
+func NormalDistribution(generator *rand.Rand, standardDeviation float64) JitterFunc {
 	random := fallbackNewRandom(generator)
 
 	return func(duration time.Duration) time.Duration {
