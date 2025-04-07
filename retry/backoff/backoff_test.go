@@ -1,6 +1,164 @@
 package backoff
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestConstant(t *testing.T) {
+	duration := 100 * time.Millisecond
+	b := Constant(duration)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, duration},
+		{1, duration},
+		{5, duration},
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Constant()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestExplicit(t *testing.T) {
+	durations := []time.Duration{
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+	b := Explicit(durations...)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, durations[0]},
+		{1, durations[1]},
+		{2, durations[2]},
+		{3, durations[2]}, // Exceed index
+		{5, durations[2]}, // Exceed index
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Explicit()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestIncremental(t *testing.T) {
+	initial := 100 * time.Millisecond
+	increment := 50 * time.Millisecond
+	b := Incremental(initial, increment)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, initial + increment*0},
+		{1, initial + increment*1},
+		{3, initial + increment*3},
+		{5, initial + increment*5},
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Incremental()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestLinear(t *testing.T) {
+	factor := 50 * time.Millisecond
+	b := Linear(factor)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, 0}, // 50ms * 0
+		{1, factor * 1},
+		{4, factor * 4},
+		{7, factor * 7},
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Linear()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestExponential(t *testing.T) {
+	factor := 100 * time.Millisecond
+	base := 2.0
+	b := Exponential(factor, base)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, factor * 1}, // 2^0=1
+		{1, factor * 2}, // 2^1=2
+		{3, factor * 8}, // 2^3=8
+		{5, factor * 32},
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Exponential()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestBinaryExponential(t *testing.T) {
+	factor := 100 * time.Millisecond
+	b := BinaryExponential(factor)
+
+	// Should behave same as Exponential with base=2
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, factor * 1},
+		{2, factor * 4},
+		{4, factor * 16},
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("BinaryExponential()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
+
+func TestFibonacci(t *testing.T) {
+	factor := 100 * time.Millisecond
+	b := Fibonacci(factor)
+
+	tests := []struct {
+		retries uint
+		want    time.Duration
+	}{
+		{0, 0 * factor},  // fib(0)=0
+		{1, 1 * factor},  // fib(1)=1
+		{2, 1 * factor},  // fib(2)=1
+		{3, 2 * factor},  // fib(3)=2
+		{5, 5 * factor},  // fib(5)=5
+		{7, 13 * factor}, // fib(7)=13
+	}
+
+	for _, tt := range tests {
+		if got := b(tt.retries); got != tt.want {
+			t.Errorf("Fibonacci()(%d) = %v, want %v", tt.retries, got, tt.want)
+		}
+	}
+}
 
 // TestFibonacciNumberBoundaryConditions tests edge cases
 func TestFibonacciNumberBoundaryConditions(t *testing.T) {

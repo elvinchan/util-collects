@@ -22,6 +22,7 @@ func (t *timerImpl) After(d time.Duration) <-chan time.Time {
 
 func newDefaultConfig() *Config {
 	return &Config{
+		retryIf:          IsRecoverable,
 		attemptsForError: make(map[error]uint),
 		timer:            &timerImpl{},
 	}
@@ -54,33 +55,55 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 		n       uint
 		emptyT  T
 		lastErr error
+		wrapErr *Error
 	)
+	if config.wrapErrorsSize > 0 {
+		wrapErr = NewError(config.wrapErrorsSize)
+	}
 	shouldRetry := true
 	for shouldRetry {
 		if n == 0 {
 			if config.delay > 0 {
 				select {
 				case <-ctx.Done():
+					if wrapErr != nil {
+						wrapErr.Add(ctx.Err())
+						return emptyT, wrapErr
+					}
 					return emptyT, ctx.Err()
 				case <-config.timer.After(config.delay):
-				default:
 				}
 			} else {
 				if err := ctx.Err(); err != nil {
+					if wrapErr != nil {
+						wrapErr.Add(err)
+						return emptyT, wrapErr
+					}
 					return emptyT, err
 				}
 			}
 		} else {
-			if config.onRetry != nil {
-				config.onRetry(n, lastErr)
-			}
 			if config.backoffFunc != nil {
 				select {
 				case <-ctx.Done():
+					if wrapErr != nil {
+						wrapErr.Add(ctx.Err())
+						return emptyT, wrapErr
+					}
 					return emptyT, ctx.Err()
 				case <-config.timer.After(config.backoffFunc(n)):
-				default:
 				}
+			} else {
+				if err := ctx.Err(); err != nil {
+					if wrapErr != nil {
+						wrapErr.Add(err)
+						return emptyT, wrapErr
+					}
+					return emptyT, err
+				}
+			}
+			if config.onRetry != nil {
+				config.onRetry(n, lastErr)
 			}
 		}
 
@@ -88,9 +111,12 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 		if err == nil {
 			return t, nil
 		}
+		lastErr = unpackUnrecoverable(err)
+		if wrapErr != nil {
+			wrapErr.Add(lastErr)
+		}
 
-		lastErr = err
-		if config.retryIf != nil && !config.retryIf(lastErr) {
+		if !config.retryIf(err) {
 			break
 		}
 		if config.maxAttempts > 0 && n >= config.maxAttempts {
@@ -104,6 +130,9 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 			}
 		}
 		n++
+	}
+	if wrapErr != nil {
+		return emptyT, wrapErr
 	}
 	return emptyT, lastErr
 }

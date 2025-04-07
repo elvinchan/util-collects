@@ -16,11 +16,14 @@ type Config struct {
 	maxAttempts      uint
 	delay            time.Duration
 	attemptsForError map[error]uint
+	wrapErrorsSize   int
 	timer            Timer
 	backoffFunc      backoff.BackoffFunc
 }
 
 type Option func(*Config)
+
+func emptyOption(c *Config) {}
 
 type RetryIfFunc func(error) bool
 
@@ -50,6 +53,9 @@ type RetryIfFunc func(error) bool
 //		}
 //	)
 func RetryIf(f RetryIfFunc) Option {
+	if f == nil {
+		return emptyOption
+	}
 	return func(c *Config) {
 		c.retryIf = f
 	}
@@ -71,6 +77,9 @@ type OnRetryFunc func(retries uint, err error)
 //	)
 
 func OnRetry(f OnRetryFunc) Option {
+	if f == nil {
+		return emptyOption
+	}
 	return func(c *Config) {
 		c.onRetry = f
 	}
@@ -110,6 +119,12 @@ func AttemptsForError(err error, attempts uint) Option {
 
 func IsEventuallyError(err error) Option {
 	return AttemptsForError(err, 0)
+}
+
+func WrapErrorsSize(s int) Option {
+	return func(c *Config) {
+		c.wrapErrorsSize = s
+	}
 }
 
 func WithTimer(timer Timer) Option {
