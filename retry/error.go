@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-// Error type represents list of errors in retry
+// Error implements a circular buffer to store the last N errors.
+// Used when WrapErrorsSize option is set to track historical errors.
 type Error struct {
 	errors   []error
 	capacity int
@@ -65,8 +66,8 @@ func (e *Error) As(target interface{}) bool {
 Unwrap the last error for compatibility with `errors.Unwrap()`.
 When you need to unwrap all errors, you should use `WrappedErrors()` instead.
 
-	err := Do(
-		func() error {
+	err := retry.Do(context.Background(),
+		func(_ context.Context, _ uint) error {
 			return errors.New("original error")
 		},
 		WrapAllErrors(),
@@ -89,9 +90,8 @@ func (e Error) Unwrap() error {
 func (e Error) WrappedErrors() []error {
 	if e.isFull {
 		return append(e.errors[e.nextIdx:], e.errors[:e.nextIdx]...)
-	} else {
-		return e.errors[:e.nextIdx]
 	}
+	return e.errors[:e.nextIdx]
 }
 
 type unrecoverableError struct {
@@ -114,7 +114,8 @@ func Unrecoverable(err error) error {
 	return unrecoverableError{err}
 }
 
-// IsRecoverable checks if error is an instance of `unrecoverableError`
+// IsRecoverable checks if the error is recoverable
+// (i.e., not wrapped by Unrecoverable).
 func IsRecoverable(err error) bool {
 	return !errors.Is(err, unrecoverableError{})
 }

@@ -3,6 +3,8 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,19 +12,35 @@ import (
 )
 
 func TestRetry(t *testing.T) {
-	action := func(ctx context.Context, attempt uint) error {
-		return nil
-	}
+	t.Run("Normal", func(t *testing.T) {
+		action := func(ctx context.Context, attempt uint) error {
+			return nil
+		}
 
-	err := Do(context.Background(), action)
-	if err != nil {
-		t.Error("expected a nil error")
-	}
+		err := Do(context.Background(), action)
+		if err != nil {
+			t.Error("expected a nil error")
+		}
 
-	err = <-Go(context.Background(), action)
-	if err != nil {
-		t.Error("expected a nil error")
-	}
+		err = <-Go(context.Background(), action)
+		if err != nil {
+			t.Error("expected a nil error")
+		}
+	})
+
+	t.Run("WithData", func(t *testing.T) {
+		action := func(ctx context.Context, n uint) (string, error) {
+			return fmt.Sprintf("attempt-%d", n), nil
+		}
+
+		result, err := DoWithData(context.Background(), action)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.HasPrefix(result, "attempt-") {
+			t.Errorf("result = %q, want prefix 'attempt-'", result)
+		}
+	})
 }
 
 var (
@@ -31,7 +49,7 @@ var (
 	errAnotherMock = errors.New("another mock error")
 )
 
-func TestDo_Success(t *testing.T) {
+func TestMaxRetries(t *testing.T) {
 	attempt := 0
 	action := func(ctx context.Context, n uint) error {
 		attempt++
@@ -50,7 +68,7 @@ func TestDo_Success(t *testing.T) {
 	}
 }
 
-func TestDoWithData_ErrorHandling(t *testing.T) {
+func TestErrorHandling(t *testing.T) {
 	t.Run("MaxAttempts", func(t *testing.T) {
 		action := func(ctx context.Context, attempt uint) (int, error) {
 			return 0, errMock
@@ -103,7 +121,7 @@ func TestRetryIf(t *testing.T) {
 
 func TestOnRetry(t *testing.T) {
 	var (
-		attemps uint
+		retries uint
 		lastErr error
 	)
 
@@ -114,13 +132,13 @@ func TestOnRetry(t *testing.T) {
 	_ = Do(context.Background(), action,
 		MaxRetries(3),
 		OnRetry(func(n uint, err error) {
-			attemps = n
+			retries = n
 			lastErr = err
 		}),
 	)
 
-	if attemps != 4 {
-		t.Errorf("OnRetry() called %d times, want 4", attemps)
+	if retries != 3 {
+		t.Errorf("OnRetry() called %d times, want 3", retries)
 	}
 	if !errors.Is(lastErr, errMock) {
 		t.Errorf("OnRetry() last error = %v, want %v", lastErr, errMock)
@@ -178,7 +196,7 @@ func TestBackoffStrategies(t *testing.T) {
 			}()
 
 			_ = Do(ctx, action,
-				MaxRetries(2),
+				MaxRetries(3),
 				tc.option,
 				WithTimer(mockTimer),
 				OnRetry(func(n uint, err error) {
@@ -222,7 +240,7 @@ func TestContextCancel(t *testing.T) {
 	}
 }
 
-func TestGo_PanicHandling(t *testing.T) {
+func TestGoPanicHandling(t *testing.T) {
 	action := func(ctx context.Context, n uint) error {
 		panic("test panic")
 	}
@@ -259,6 +277,146 @@ func TestAttemptsForError(t *testing.T) {
 	}
 	if !errors.Is(err, errMock) {
 		t.Errorf("AttemptsForError() error = %v, want %v", err, errMock)
+	}
+}
+
+func TestWrapErrors(t *testing.T) {
+	action := func(ctx context.Context, n uint) error {
+		return fmt.Errorf("attempt %d error", n)
+	}
+
+	err := Do(context.Background(), action,
+		MaxRetries(3),
+		WrapErrorsSize(2),
+	)
+
+	var retryErr *Error
+	if !errors.As(err, &retryErr) {
+		t.Fatal("expected wrapped errors")
+	}
+
+	wrapped := retryErr.WrappedErrors()
+	if len(wrapped) != 2 {
+		t.Fatalf("got %d wrapped errors, want 2", len(wrapped))
+	}
+
+	expected := []string{
+		"attempt 3 error",
+		"attempt 4 error",
+	}
+	for i, err := range wrapped {
+		if !strings.Contains(err.Error(), expected[i]) {
+			t.Errorf("wrapped[%d] = %v, want contains %q", i, err, expected[i])
+		}
+	}
+}
+
+func TestInfiniteRetry(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	attempts := 0
+	action := func(ctx context.Context, n uint) error {
+		attempts++
+		return errors.New("transient error")
+	}
+
+	err := Do(ctx, action, MaxAttempts(0))
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("error = %v, want %v", err, context.DeadlineExceeded)
+	}
+	if attempts < 5 {
+		t.Errorf("attempts = %d, expected >5 under time constraint", attempts)
+	}
+}
+
+func TestMultipleErrorAttempts(t *testing.T) {
+	var (
+		errA = errors.New("error A")
+		errB = errors.New("error B")
+		errC = errors.New("error C")
+	)
+
+	testCases := []struct {
+		errSequence  []error
+		wantAttempts int
+	}{
+		{
+			errSequence:  []error{errA, errA, errB},
+			wantAttempts: 2, // errA:2 attempts, errB:0 attempt
+		},
+		{
+			errSequence:  []error{errB, errB, errB},
+			wantAttempts: 1, // errB:1 attempts
+		},
+		{
+			errSequence:  []error{errC, errC, errC},
+			wantAttempts: 3, // errC:3 attempts (no limits)
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			attempt := 0
+			action := func(ctx context.Context, n uint) error {
+				if attempt >= len(tc.errSequence) {
+					return nil
+				}
+				err := tc.errSequence[attempt]
+				attempt++
+				return err
+			}
+
+			_ = Do(context.Background(), action,
+				AttemptsForError(errA, 2),
+				AttemptsForError(errB, 1),
+				AttemptsForError(errC, 0),
+				MaxAttempts(3),
+			)
+
+			if attempt != tc.wantAttempts {
+				t.Errorf("attempts = %d, want %d", attempt, tc.wantAttempts)
+			}
+		})
+	}
+}
+
+func TestBackoffLimit(t *testing.T) {
+	mockTimer := &mockTimer{ch: make(chan time.Time)}
+	maxDelay := 20 * time.Millisecond
+
+	var delays []time.Duration
+	action := func(ctx context.Context, n uint) error {
+		return errMock
+	}
+
+	go func() {
+		// Simulate timer advances
+		for {
+			mockTimer.ch <- time.Time{}
+		}
+	}()
+
+	_ = Do(context.Background(), action,
+		MaxRetries(3),
+		BackoffLimit(
+			backoff.Linear(10*time.Millisecond),
+			maxDelay,
+		),
+		WithTimer(mockTimer),
+		OnRetry(func(n uint, err error) {
+			delays = append(delays, mockTimer.lastDelay)
+		}),
+	)
+
+	for i, d := range delays {
+		if d > maxDelay {
+			t.Errorf("delay[%d] = %v exceeds limit %v", i, d, maxDelay)
+		}
+		if i > 0 && d < delays[i-1] {
+			t.Errorf("delay[%d] = %v should be larger than previous %v",
+				i, d, delays[i-1])
+		}
 	}
 }
 

@@ -14,8 +14,8 @@ type Config struct {
 	retryIf          RetryIfFunc
 	onRetry          OnRetryFunc
 	maxAttempts      uint
-	delay            time.Duration
 	attemptsForError map[error]uint
+	delay            time.Duration
 	wrapErrorsSize   int
 	timer            Timer
 	backoffFunc      backoff.BackoffFunc
@@ -32,8 +32,8 @@ type RetryIfFunc func(error) bool
 //
 // skip retry if special error example:
 //
-//	retry.Do(
-//		func() error {
+//	retry.Do(context.Background(),
+//		func(_ context.Context, _ uint) error {
 //			return errors.New("special error")
 //		},
 //		retry.RetryIf(func(err error) bool {
@@ -47,8 +47,8 @@ type RetryIfFunc func(error) bool
 // By default RetryIf stops execution if the error is wrapped using `retry.Unrecoverable`,
 // so above example may also be shortened to:
 //
-//	retry.Do(
-//		func() error {
+//	retry.Do(context.Background(),
+//		func(_ context.Context, _ uint) error {
 //			return retry.Unrecoverable(errors.New("special error"))
 //		}
 //	)
@@ -63,12 +63,12 @@ func RetryIf(f RetryIfFunc) Option {
 
 type OnRetryFunc func(retries uint, err error)
 
-// OnRetry function callback are called each retry
+// OnRetry function callback are called each retry after first attempt
 //
 // log each retry example:
 //
-//	retry.Do(
-//		func() error {
+//	retry.Do(context.Background(),
+//		func(_ context.Context, _ uint) error {
 //			return errors.New("some error")
 //		},
 //		retry.OnRetry(func(retries uint, err error) {
@@ -85,7 +85,8 @@ func OnRetry(f OnRetryFunc) Option {
 	}
 }
 
-// MaxRetries set max retries to execute action.
+// MaxRetries sets the maximum number of retries (excluding initial attempt).
+// Example: MaxRetries(3) allows 1 initial attempt + 3 retries = 4 total attempts.
 // If set to 0, no retries will be executed.
 // If want to retry forever, use `MaxAttempts(0)` instead.
 func MaxRetries(m uint) Option {
@@ -102,31 +103,49 @@ func MaxAttempts(m uint) Option {
 	}
 }
 
+// AttemptsForError sets count of attempts in case execution results in given `err`.
+// Attempts for the given `err` are also counted against total attempts.
+// The retry will stop if any of given attempts is exhausted.
+func AttemptsForError(err error, attempts uint) Option {
+	return func(c *Config) {
+		c.attemptsForError[err] = attempts
+	}
+}
+
+// Delay set delay for first attempt.
+// If you want dalay for following attempts, see `Backoff`.
 func Delay(d time.Duration) Option {
 	return func(c *Config) {
 		c.delay = d
 	}
 }
 
-func AttemptsForError(err error, attempts uint) Option {
-	return func(c *Config) {
-		if c.attemptsForError == nil {
-			c.attemptsForError = make(map[error]uint)
-		}
-		c.attemptsForError[err] = attempts
-	}
-}
-
-func IsEventuallyError(err error) Option {
-	return AttemptsForError(err, 0)
-}
-
+// WrapErrorsSize set the size of error wrapping stack.
+// If set to 0, it will not wrap errors, or it will wrap errors with `retry.Error`.
+// Default is 0.
 func WrapErrorsSize(s int) Option {
 	return func(c *Config) {
 		c.wrapErrorsSize = s
 	}
 }
 
+// WithTimer provides a way to swap out timer module implementations.
+// This primarily is useful for mocking/testing, where you may not want to explicitly wait for a set duration
+// for retries.
+//
+// example of augmenting time.After with a print statement
+//
+//	type struct MyTimer {}
+//
+//	func (t *MyTimer) After(d time.Duration) <- chan time.Time {
+//	    fmt.Print("Timer called!")
+//	    return time.After(d)
+//	}
+//
+//	retry.Do(context.Background(),
+//	    func(_ context.Context, _ uint) error { ... },
+//		   retry.WithTimer(&MyTimer{})
+//	)
 func WithTimer(timer Timer) Option {
 	return func(c *Config) {
 		c.timer = timer

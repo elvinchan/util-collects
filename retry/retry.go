@@ -48,7 +48,9 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 
 	attemptsForError := make(map[error]uint, len(config.attemptsForError))
 	for err, attempts := range config.attemptsForError {
-		attemptsForError[err] = attempts
+		if attempts > 0 {
+			attemptsForError[err] = attempts
+		}
 	}
 
 	var (
@@ -62,55 +64,43 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 	}
 	shouldRetry := true
 	for shouldRetry {
-		if n == 0 {
-			if config.delay > 0 {
-				select {
-				case <-ctx.Done():
-					if wrapErr != nil {
-						wrapErr.Add(ctx.Err())
-						return emptyT, wrapErr
-					}
-					return emptyT, ctx.Err()
-				case <-config.timer.After(config.delay):
+		// prepare exec action
+		var delay time.Duration
+		if n == 0 && config.delay > 0 {
+			delay = config.delay
+		} else if n > 0 && config.backoffFunc != nil {
+			delay = config.backoffFunc(n)
+		}
+		if delay > 0 {
+			select {
+			case <-ctx.Done():
+				if wrapErr != nil {
+					wrapErr.Add(ctx.Err())
+					return emptyT, wrapErr
 				}
-			} else {
-				if err := ctx.Err(); err != nil {
-					if wrapErr != nil {
-						wrapErr.Add(err)
-						return emptyT, wrapErr
-					}
-					return emptyT, err
-				}
+				return emptyT, ctx.Err()
+			case <-config.timer.After(delay):
 			}
 		} else {
-			if config.backoffFunc != nil {
-				select {
-				case <-ctx.Done():
-					if wrapErr != nil {
-						wrapErr.Add(ctx.Err())
-						return emptyT, wrapErr
-					}
-					return emptyT, ctx.Err()
-				case <-config.timer.After(config.backoffFunc(n)):
+			if err := ctx.Err(); err != nil {
+				if wrapErr != nil {
+					wrapErr.Add(err)
+					return emptyT, wrapErr
 				}
-			} else {
-				if err := ctx.Err(); err != nil {
-					if wrapErr != nil {
-						wrapErr.Add(err)
-						return emptyT, wrapErr
-					}
-					return emptyT, err
-				}
-			}
-			if config.onRetry != nil {
-				config.onRetry(n, lastErr)
+				return emptyT, err
 			}
 		}
+		if n > 0 && config.onRetry != nil {
+			config.onRetry(n, lastErr)
+		}
 
+		// exec action
 		t, err := action(ctx, n+1)
 		if err == nil {
 			return t, nil
 		}
+
+		// handle error, prepare next iteration
 		lastErr = unpackUnrecoverable(err)
 		if wrapErr != nil {
 			wrapErr.Add(lastErr)
@@ -119,7 +109,7 @@ func DoWithData[T any](ctx context.Context, action ActionWithData[T], options ..
 		if !config.retryIf(err) {
 			break
 		}
-		if config.maxAttempts > 0 && n >= config.maxAttempts {
+		if config.maxAttempts > 0 && n+1 >= config.maxAttempts {
 			break
 		}
 		for errToCheck, attempts := range attemptsForError {
